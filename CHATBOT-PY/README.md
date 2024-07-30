@@ -27,6 +27,8 @@ Split document and save to Supabase Vector database (Run once or only when you n
 ```bash
 python3 split_document.py
 ```
+## DOCUMENTATION
+![alt text](image.png)
 
 ### More Docs and Links
 [Streamlit Docs](https://docs.streamlit.io/get-started)  
