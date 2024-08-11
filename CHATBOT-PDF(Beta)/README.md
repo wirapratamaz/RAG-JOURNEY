@@ -30,4 +30,7 @@ streamlit run chat_pdf.py
 streamlit run chat_pdf_llma3.py
 ```
 ### Interactive Application Demo
-https://github.com/Shubhamsaboo/awesome-llm-apps/assets/31396011/12bdfc11-c877-4fc7-9e70-63f21d2eb977
+
+
+https://github.com/user-attachments/assets/086fbbec-3f81-43a7-a35f-66c407335ce0
+
