@@ -13,7 +13,7 @@ def embedchain_bot(db_path, api_key):
     )
 
 st.title("Chat with PDF")
-
+st.caption("This app allows you to chat with a PDF using OpenAi and ChromaDb running locally!")
 openai_access_token = st.text_input("OpenAI API Key", type="password")
 
 if openai_access_token:
