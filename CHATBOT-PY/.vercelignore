@@ -1,0 +1,10 @@
+.vercelignore
+.myvenv
+__pycache__
+*.pyc
+*.pyo
+.env
+.git
+node_modules
+large_dataset_files/
+*.log

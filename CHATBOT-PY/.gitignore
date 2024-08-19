@@ -2,3 +2,4 @@ myvenv
 .env
 chroma_db
 __pycache__
+.vercel
