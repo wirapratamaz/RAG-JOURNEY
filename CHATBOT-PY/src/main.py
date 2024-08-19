@@ -53,8 +53,8 @@ history_aware_retriever = create_history_aware_retriever(
 answer_prefix = (
     "You are an assistant for question-answering tasks. "
     "Use the following pieces of retrieved context and the chat history to answer the question. "
-    "Try to find the answer in the context. If the answer is not given in the context, find the answer in the chat history if possible."
-    "If you don't know the answer, say \"I'm sorry, I don't know the answer to that.\""
+    "Try to find the answer in the context. If the answer is not given in the context, find the answer in the chat history if possible. "
+    "If you don't know the answer, say \"I'm sorry, I don't know the answer to that.\" "
     "Keep the answer concise."
     "\n\n"
     "{context}"

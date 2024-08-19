@@ -3,6 +3,7 @@ from .models import QueryRequest
 from .chat_history import convert_to_chat_message_history
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from main import rag_chain
+from retriever import debug_retrieved_documents
 
 router = APIRouter()
 
@@ -25,11 +26,25 @@ def answer_query(request: QueryRequest):
             output_messages_key="answer",
         )
         
+        # Add debug logs to confirm data flow
+        print(f"Received query: {request.query}")
+        print(f"Chat history: {request.chat_history}")
+        
         response = conversational_rag_chain.invoke(
             {"input": request.query},
             config={"configurable": {"session_id": "abc123"}}
         )
         
-        return {"answer": response["answer"]}
+        # Debugging the response
+        print(f"Response from RAG chain: {response}")
+        
+        # Debug retrieved documents and answer
+        debug_retrieved_documents(response)
+        
+        if "answer" in response:
+            return {"answer": response["answer"]}
+        else:
+            raise ValueError("RAG chain did not return an answer")
     except Exception as e:
+        print(f"An error occurred while answering the query: {e}")
         raise HTTPException(status_code=500, detail=str(e))

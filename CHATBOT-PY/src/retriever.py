@@ -23,3 +23,15 @@ try:
     retriever = vectorstore.as_retriever()
 except Exception as e:
     print(f"An error occurred: {e}")
+
+# Debugging function
+def debug_retrieved_documents(response):
+    context_docs = response.get('context', [])
+    if not context_docs:
+        print("No documents retrieved.")
+        return
+
+    for doc in context_docs:
+        print(f"Retrieved document: {doc.page_content}")
+
+    print(f"Answer based on context: {response.get('answer', 'No answer found')}")
