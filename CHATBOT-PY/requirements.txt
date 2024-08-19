@@ -7,3 +7,5 @@ langchain-openai
 langchain_text_splitters
 langchain-core
 langchain-chroma
+fastapi
+uvicorn
