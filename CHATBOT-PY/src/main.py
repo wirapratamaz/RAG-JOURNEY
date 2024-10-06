@@ -8,6 +8,9 @@ from langchain.memory import ConversationBufferMemory
 from retriever import retriever
 import pandas as pd
 import time
+from fetch_posts import fetch_rss_posts, process_and_embed_posts, get_latest_posts
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
 # Bypass SSL verification if needed
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -35,38 +38,54 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     return_source_documents=False
 )
 
+# Load a pre-trained model for embeddings
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+def calculate_relevance_scores(chunk, query):
+    # Generate embeddings for the chunk and the query
+    chunk_embedding = model.encode([chunk])
+    query_embedding = model.encode([query])
+    
+    # Calculate cosine similarity
+    similarity_score = cosine_similarity(chunk_embedding, query_embedding)
+    
+    # Return the similarity score as a list
+    return similarity_score.flatten().tolist()
+
 def chunking_and_retrieval(user_input):
     st.subheader("1. Chunking and Retrieval")
-    with st.expander("Pemecahan Informasi", expanded=True):
-        # Simulate chunking process
-        chunks = [
-            "Visi dan Misi Prodi Sistem Informasi Undiksha",
-            "Kurikulum Terbaru Sistem Informasi 2023",
-            "Fasilitas Lab Unggulan: AI dan Big Data",
-            "Peluang Karir Lulusan Sistem Informasi",
-            "Program Magang di Perusahaan Teknologi Terkemuka"
-        ]
-        for i, chunk in enumerate(chunks):
-            st.text(f"Bagian {i+1}: {chunk}")
-            time.sleep(0.5)
-    
-    with st.expander("Analisis Konteks", expanded=True):
-        # Simulate embedding process
+    # Remove the outer expander to avoid nesting
+    # with st.expander("Pemecahan Informasi", expanded=True):
+    # Fetch latest RSS feed posts
+    posts = fetch_rss_posts()
+    if posts:
+        # Process and embed posts after retrieval
+        embedded_data = []
+        for post in posts:
+            chunk = post['content']  # Extract content
+            # Calculate relevance scores using the user input as the query
+            relevance_scores = calculate_relevance_scores(chunk, user_input)
+            embedded_data.append((chunk, relevance_scores))
+        
+        display_embedding_process(embedded_data)
+    else:
+        st.warning("No new posts found.")
+
+def display_embedding_process(embedded_data):
+    st.subheader("Embedding Process")
+    # Ensure this expander is not nested
+    with st.expander("Detail Embedding", expanded=True):
+        # Prepare data for display
         data = {
-            "No": range(1, 6),
-            "Konten": chunks,
-            "Relevansi (3 nilai teratas)": [
-                [0.95, 0.88, 0.82],
-                [0.91, 0.87, 0.85],
-                [0.89, 0.86, 0.83],
-                [0.93, 0.90, 0.87],
-                [0.92, 0.89, 0.86]
-            ]
+            "No": range(1, len(embedded_data) + 1),
+            "Konten": [chunk for chunk, _ in embedded_data],
+            "Relevansi (3 nilai teratas)": [scores[:3] for _, scores in embedded_data]
         }
+        
         df = pd.DataFrame(data)
         st.dataframe(df)
     
-    st.success("Analisis informasi selesai! 🎉")
+    st.success("Analisis informasi selesai!")
 
 def generation(user_input):
     st.subheader("2. Generation")
@@ -85,22 +104,26 @@ def generation(user_input):
     return answer
 
 def main():
-    st.set_page_config(page_title="SisInfoBot Undiksha", page_icon="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", layout="wide")
+    st.set_page_config(
+        page_title="SisInfoBot Undiksha",
+        page_icon="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s",
+        layout="wide"
+    )
     
     # Sidebar
     with st.sidebar:
         st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=150)
-        st.title("SisInfoBot Undiksha")
+        st.title("SisInfo Undiksha")
         st.selectbox("Model AI", ["GPT-3.5 Turbo"])
         st.text("Universitas Pendidikan Ganesha")
         st.markdown("---")
         st.markdown("### 🌟 Fitur Unggulan:")
         st.markdown("• Informasi Terkini Prodi")
         st.markdown("• Panduan Akademik")
-        st.markdown("• Assiten Virtual Anda")
-
+        st.markdown("• Asisten Virtual Anda")
+    
     # Main content
-    st.header("Selamat Datang di SisInfoBot Undiksha! 🤖💻")
+    st.header("Selamat Datang di SisInfo Undiksha! 🤖💻")
     st.info("Halo, Saya adalah asisten virtual khusus untuk mahasiswa Sistem Informasi Undiksha. Tanyakan apa saja seputar program studi, kurikulum, atau informasi yang berkaitan!")
     
     # Display chat history
@@ -111,7 +134,7 @@ def main():
         if message["role"] == "user":
             st.text_area("Anda:", value=message["content"], height=50, disabled=True, key=f"user_{i}")
         else:
-            st.text_area("SisInfoBot:", value=message["content"], height=100, disabled=True, key=f"bot_{i}")
+            st.text_area("SisInfo:", value=message["content"], height=100, disabled=True, key=f"bot_{i}")
     
     # User input
     user_input = st.text_input("Ada yang ingin Anda tanyakan tentang Sistem Informasi Undiksha?")
@@ -124,7 +147,7 @@ def main():
         
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         
-        st.subheader("Jawaban SisInfoBot:")
+        st.subheader("Jawaban SisInfo:")
         with st.container():
             st.markdown(f"""
             <div style="background-color: #f0f2f6; border-radius: 10px; padding: 20px; border-left: 5px solid #4CAF50;">
@@ -138,7 +161,13 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📢 Info Terkini:")
-    st.sidebar.info("Pendaftaran program magang di Google untuk mahasiswa Sistem Informasi akan dibuka bulan depan! Siapkan CV terbaikmu!")
+    with st.sidebar.expander("Lihat Info Terkini"):
+        latest_posts = get_latest_posts(formatted=True)
+        if latest_posts:
+            for post in latest_posts:
+                st.markdown(f"- [{post['title']}]({post['link']})")
+        else:
+            st.info("Tidak ada informasi terkini saat ini.")
 
 if __name__ == "__main__":
     main()
