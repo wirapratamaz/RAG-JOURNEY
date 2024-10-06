@@ -4,6 +4,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain.docstore.document import Document
+from web_crawler import crawl_undiksha_website
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,13 +19,19 @@ try:
     with open("si_faqs.txt", "r", encoding="utf8") as file:
         text = file.read()
 
-    # Split the text
+    # Crawl the website
+    web_content = crawl_undiksha_website()
+
+    # Combine both sources
+    combined_text = text + "\n" + web_content
+
+    # Split the combined text
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=50,
         separators=["\n\n", "\n", " ", ""]
     )
-    split_texts = text_splitter.split_text(text)
+    split_texts = text_splitter.split_text(combined_text)
 
     # Create document objects
     docs = [Document(page_content=chunk) for chunk in split_texts]
@@ -39,7 +46,10 @@ try:
         embedding=embeddings,
         persist_directory=persist_directory
     )
-    vectorstore.persist()
+    
+    # Check if there's a new method for persistence
+    # vectorstore.save() or similar, based on the updated API
+
     print("Success!")
 except Exception as e:
     print(f"An error occurred: {e}")

@@ -9,8 +9,8 @@ from retriever import retriever
 import pandas as pd
 import time
 from fetch_posts import fetch_rss_posts, process_and_embed_posts, get_latest_posts
-from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity # type: ignore
+from sentence_transformers import SentenceTransformer # type: ignore
 
 # Bypass SSL verification if needed
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -54,22 +54,22 @@ def calculate_relevance_scores(chunk, query):
 
 def chunking_and_retrieval(user_input):
     st.subheader("1. Chunking and Retrieval")
-    # Remove the outer expander to avoid nesting
-    # with st.expander("Pemecahan Informasi", expanded=True):
-    # Fetch latest RSS feed posts
-    posts = fetch_rss_posts()
-    if posts:
-        # Process and embed posts after retrieval
+    # Use the retriever to fetch relevant documents from the Chroma vector store
+    try:
+        # Retrieve documents related to the user input
+        retrieved_docs = retriever.get_relevant_documents(user_input)
+        
+        # Prepare data for display
         embedded_data = []
-        for post in posts:
-            chunk = post['content']  # Extract content
+        for doc in retrieved_docs:
+            chunk = doc.page_content  # Extract content from the document
             # Calculate relevance scores using the user input as the query
             relevance_scores = calculate_relevance_scores(chunk, user_input)
             embedded_data.append((chunk, relevance_scores))
         
         display_embedding_process(embedded_data)
-    else:
-        st.warning("No new posts found.")
+    except Exception as e:
+        st.warning(f"An error occurred during retrieval: {e}")
 
 def display_embedding_process(embedded_data):
     st.subheader("Embedding Process")
