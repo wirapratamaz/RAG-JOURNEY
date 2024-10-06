@@ -1,8 +1,7 @@
-#src/split_document.py
 import os
 from dotenv import load_dotenv
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain.docstore.document import Document
 
@@ -26,24 +25,21 @@ try:
         separators=["\n\n", "\n", " ", ""]
     )
     split_texts = text_splitter.split_text(text)
-    
-    # # Print each split text chunk to the console to see the output
-    # for i, chunk in enumerate(split_texts):
-    #     print(f"Chunk {i+1}:")
-    #     print(chunk)
-    #     print("\n" + "-"*80 + "\n")  # Separator line between chunks for readability
-
 
     # Create document objects
     docs = [Document(page_content=chunk) for chunk in split_texts]
-    
+
     # Initialize OpenAI embeddings
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 
     # Initialize Chroma vector store
     persist_directory = "./chroma_db"
-    vectorstore = Chroma.from_documents(docs, embedding=embeddings, persist_directory=persist_directory)
-
+    vectorstore = Chroma.from_documents(
+        documents=docs,
+        embedding=embeddings,
+        persist_directory=persist_directory
+    )
+    vectorstore.persist()
     print("Success!")
 except Exception as e:
     print(f"An error occurred: {e}")

@@ -1,8 +1,7 @@
-#  src/retriever.py
 import os
 from dotenv import load_dotenv
-from langchain_chroma.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,7 +17,10 @@ try:
 
     # Initialize Chroma vector store
     persist_directory = "./chroma_db"
-    vectorstore = Chroma(embedding_function=embeddings, persist_directory=persist_directory)
+    vectorstore = Chroma(
+        embedding_function=embeddings,
+        persist_directory=persist_directory
+    )
 
     retriever = vectorstore.as_retriever()
 except Exception as e:

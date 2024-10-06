@@ -1,26 +1,32 @@
-Getting started
-What is the accreditation status of the Sistem Informasi program?
-The Sistem Informasi program at Universitas Pendidikan Ganesha (Undiksha) was accredited in 2021 and has received an accreditation rating of "Good". Undiksha itself obtained "Excellent" accreditation in 2018.
-When was the Sistem Informasi program established?
-The Sistem Informasi program is a new undergraduate (S-1) program that was proposed on September 5, 2017, and officially opened as per the Minister of Research, Technology, and Higher Education Regulation No. 116/KPT/I/2018 on February 2, 2018.
-What is the vision of the Sistem Informasi program?
-The vision of the Sistem Informasi program is to become a leading study program in developing knowledge and technology in the field of Information Systems based on the philosophy of Tri Hita Karana in Bali and Nusa Tenggara by the year 2030.
-What are the missions of the Sistem Informasi program?
-- To provide quality education and teaching in the field of Information Systems to produce competent, competitive, and character-building graduates.
-- To conduct innovative and collaborative research to support the development and utilization of knowledge in Information Systems.
-- To engage in community service to optimize the use of Information Technology for organizations, businesses, and the broader community. 
-- To build and develop intensive and extensive cooperation with various organizations/institutions to enhance collaboration in the development and utilization of knowledge in Information Systems.
-What are the objectives of the Sistem Informasi program?
-- To produce graduates who are knowledgeable, competent, and ethical in developing and managing information systems.
-- To produce competitive and professional graduates who can provide the best alternative solutions related to Information Technology's implementation and evaluation in organizations/businesses.
-- To produce graduates equipped with effective communication skills and able to collaborate with various parties to gather and analyze Information Technology needs.
-What notable achievements does the Sistem Informasi program have?
-In 2021, the Sistem Informasi program was ranked among the "Top 10 Programs with Highest Student Admission Competitiveness" and the "Top 10 Most Favorite Programs for Student Admissions" based on 108 applicants, where 31 were admitted.
-What is the Practisi Mengajar program?
-The Practisi Mengajar program, initiated by the Ministry of Education, Culture, Research, and Technology of the Republic of Indonesia, aims to prepare university graduates for the workforce. It encourages active collaboration between practicing experts and faculty members to facilitate profound and meaningful exchanges of knowledge and skills within academic circles and the professional world.
-Where can I find more information about the Sistem Informasi program?
-More information can be found on the following websites:  
-- Akreditasi Program Studi: https://akademik.undiksha.ac.id/dokumen-akademik/akreditasi-program-studi/  
-- Ijin Program Studi: https://akademik.undiksha.ac.id/dokumen-akademik/ijin-penyelengggaraan-prodi/  
-- Profil Program Studi pada SINTA: https://sinta.kemdikbud.go.id/departments/profile/509/001048/57201  
+Apa status akreditasi dari program Sistem Informasi?
+Program Sistem Informasi di Universitas Pendidikan Ganesha (Undiksha) terakreditasi pada tahun 2021 dan menerima peringkat akreditasi "Baik". Undiksha sendiri memperoleh akreditasi "Unggul" pada tahun 2018.
+
+Kapan program Sistem Informasi ini didirikan?
+Program Sistem Informasi adalah program sarjana (S-1) baru yang diusulkan pada 5 September 2017, dan secara resmi dibuka sesuai dengan Peraturan Menteri Riset, Teknologi, dan Pendidikan Tinggi No. 116/KPT/I/2018 pada 2 Februari 2018.
+
+Apa visi dari program Sistem Informasi?
+Visi dari program Sistem Informasi adalah menjadi program studi terkemuka dalam mengembangkan pengetahuan dan teknologi di bidang Sistem Informasi berdasarkan filosofi Tri Hita Karana di Bali dan Nusa Tenggara pada tahun 2030.
+
+Apa misi dari program Sistem Informasi?
+- Menyediakan pendidikan dan pengajaran berkualitas di bidang Sistem Informasi untuk menghasilkan lulusan yang kompeten, berdaya saing, dan memiliki karakter.
+- Melakukan penelitian inovatif dan kolaboratif untuk mendukung pengembangan dan pemanfaatan pengetahuan dalam Sistem Informasi.
+- Melibatkan diri dalam layanan masyarakat untuk mengoptimalkan penggunaan Teknologi Informasi bagi organisasi, bisnis, dan masyarakat luas.
+- Membangun dan mengembangkan kerja sama yang intensif dan luas dengan berbagai organisasi/institusi untuk meningkatkan kolaborasi dalam pengembangan dan pemanfaatan pengetahuan dalam Sistem Informasi.
+
+Apa tujuan dari program Sistem Informasi?
+- Menghasilkan lulusan yang berpengetahuan, kompeten, dan beretika dalam mengembangkan dan mengelola sistem informasi.
+- Menghasilkan lulusan yang kompetitif dan profesional yang dapat memberikan solusi alternatif terbaik terkait implementasi dan evaluasi Teknologi Informasi dalam organisasi/bisnis.
+- Menghasilkan lulusan yang dilengkapi dengan keterampilan komunikasi yang efektif dan mampu berkolaborasi dengan berbagai pihak untuk mengumpulkan dan menganalisis kebutuhan Teknologi Informasi.
+
+Apa pencapaian penting dari program Sistem Informasi?
+Pada 2021, program Sistem Informasi mendapatkan peringkat di antara "Top 10 Program dengan Daya Saing Penerimaan Mahasiswa Tertinggi" dan "Top 10 Program Favorit untuk Penerimaan Mahasiswa" berdasarkan 108 pelamar, di mana 31 di antaranya diterima.
+
+Apa itu program Praktisi Mengajar?
+Program Praktisi Mengajar, yang diinisiasi oleh Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi Republik Indonesia, bertujuan untuk mempersiapkan lulusan universitas untuk dunia kerja. Program ini mendorong kolaborasi aktif antara praktisi ahli dan anggota fakultas untuk memfasilitasi pertukaran pengetahuan dan keterampilan yang mendalam dan bermakna dalam lingkaran akademik dan dunia profesional.
+
+Di mana saya bisa menemukan informasi lebih lanjut tentang program Sistem Informasi?
+Informasi lebih lanjut dapat ditemukan di situs web berikut:
+- Akreditasi Program Studi: https://akademik.undiksha.ac.id/dokumen-akademik/akreditasi-program-studi/
+- Izin Program Studi: https://akademik.undiksha.ac.id/dokumen-akademik/ijin-penyelengggaraan-prodi/
+- Profil Program Studi pada SINTA: https://sinta.kemdikbud.go.id/departments/profile/509/001048/57201
 - Profil Program Studi pada PDDIKTI: https://pddikti.kemdikbud.go.id/data_prodi/RkZERDFDMDYtNDRFMC00MTc4LTgyMzUtMDc5Q0I1RTBFQzI0
