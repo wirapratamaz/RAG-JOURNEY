@@ -1,130 +1,73 @@
-#src/main.py
 import os
+import ssl
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_openai import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 from retriever import retriever
 
-load_dotenv()
+# Bypass SSL verification if needed
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # Load environment variables
+load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# Check if environment variables are set
+# Check if the API key is set
 if not openai_api_key:
-    raise ValueError("OpenAI environment variables not set. Please set them in the .env file")
+    raise ValueError("OpenAI API key not set. Please set it in the .env file")
 
-# Initialize OpenAI embeddings
-embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-
-# Initialize model
-# llm = ChatOpenAI(model="gpt-3.5-turbo", api_key=openai_api_key)
-llm = ChatOpenAI(model="gpt-4o", api_key=openai_api_key)
-
-### Prompt templates
-
-# Contextualize question
-question_prefix = (
-    "Given a chat history (if any) and the latest user question, "
-    "formulate a standalone question. "
-    "Do NOT answer the question, "
-    "just reformulate it if needed and otherwise return it as is."
+# Initialize the OpenAI chat model
+llm = ChatOpenAI(
+    model_name="gpt-3.5-turbo",
+    openai_api_key=openai_api_key
 )
 
-contextualize_question_prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", question_prefix),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-    ]
+# Initialize the Conversational Retrieval Chain
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+qa_chain = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=retriever,
+    memory=memory,
+    return_source_documents=False
 )
 
-history_aware_retriever = create_history_aware_retriever(
-    llm, retriever, contextualize_question_prompt
-)
+def submit_input():
+    user_input = st.session_state.user_input
+    if user_input:
+        st.session_state.chat_history.append({"type": "human", "content": user_input})
 
-# Answer question
-answer_prefix = (
-    "You are an assistant for question-answering tasks. "
-    "Use the following pieces of retrieved context and the chat history to answer the question. "
-    "Try to find the answer in the context. If the answer is not given in the context, find the answer in the chat history if possible. "
-    "If you don't know the answer, say \"I'm sorry, I don't know the answer to that.\" "
-    "Keep the answer concise."
-    "\n\n"
-    "{context}"
-)
+        # Get response from the chain
+        response = qa_chain.invoke({"question": user_input})
 
-qa_prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", answer_prefix),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-    ]
-)
+        answer = response["answer"]
+        st.session_state.chat_history.append({"type": "assistant", "content": answer})
 
-question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-
-# Initialize chain
-rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
-### Use Streamlit session state for chat history ###
-def convert_to_chat_message_history(session_history) -> BaseChatMessageHistory:
-    chat_history = ChatMessageHistory()
-    for message in session_history:
-        if message["type"] == "human":
-            chat_history.add_user_message(message["content"])
-        else:
-            chat_history.add_ai_message(message["content"])
-    return chat_history
+        # Clear the input field
+        st.session_state.user_input = ""
 
 def main():
     st.set_page_config(page_title="EduBot", page_icon="🤖")
-    st.title("HI am EduBot for Sistem Information Help")
-    st.info("I am here to answer any question you may have about Sistem Information Undiksha. How may I help you today?")
-    
+    st.title("Hi, I am EduBot for Sistem Information Help")
+    st.info(
+        "I am here to answer any question you may have about Sistem Information Undiksha. How may I help you today?"
+    )
+
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
     # Display chat history
     for message in st.session_state.chat_history:
-        with st.chat_message(message["type"]):
-            st.markdown(message["content"])
-    
-    # Get user input
-    user_input = st.text_input("Start typing...", key="user_input")
-    
-    if st.button("Send"):
-        if user_input:
-            st.session_state.chat_history.append({"type": "human", "content": user_input})
-            
-            # Convert session state chat history to ChatMessageHistory
-            chat_history = convert_to_chat_message_history(st.session_state.chat_history)
-            
-            # Perform question answering
-            conversational_rag_chain = RunnableWithMessageHistory(
-                rag_chain,
-                lambda _: chat_history,
-                input_messages_key="input",
-                history_messages_key="chat_history",
-                output_messages_key="answer",
-            )
-            
-            response = conversational_rag_chain.invoke(
-                {"input": user_input},
-                config={"configurable": {"session_id": "abc123"}}
-            )
-            
-            answer = response["answer"]
-            st.session_state.chat_history.append({"type": "ai", "content": answer})
-            
-            # Re-run the Streamlit app to reflect changes
-            st.rerun()
+        if message["type"] == "human":
+            with st.chat_message("user"):
+                st.markdown(message["content"])
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(message["content"])
+
+    # Get user input with callback
+    st.text_input("Start typing...", key="user_input", on_change=submit_input)
 
 if __name__ == "__main__":
     main()

@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException
 from .models import QueryRequest
 from .chat_history import convert_to_chat_message_history
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from main import rag_chain
-from retriever import debug_retrieved_documents
+from ..main import rag_chain
+from ..retriever import debug_retrieved_documents
 
 router = APIRouter()
 
