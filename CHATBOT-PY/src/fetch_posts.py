@@ -2,7 +2,7 @@ import requests
 import logging
 import feedparser
 from retriever import vectorstore
-from langchain_openai import OpenAIEmbeddings
+from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +59,7 @@ def process_and_embed_posts(posts):
 
         # Split texts into chunks
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = text_splitter.split_texts(texts)
+        chunks = text_splitter.split_text(texts)
 
         # Initialize embeddings
         embeddings = OpenAIEmbeddings()

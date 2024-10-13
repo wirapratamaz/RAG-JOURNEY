@@ -2,15 +2,16 @@ import os
 import ssl
 import streamlit as st
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from retriever import retriever
 import pandas as pd
 import time
 from fetch_posts import fetch_rss_posts, process_and_embed_posts, get_latest_posts
-from sklearn.metrics.pairwise import cosine_similarity # type: ignore
-from sentence_transformers import SentenceTransformer # type: ignore
+from sklearn.metrics.pairwise import cosine_similarity  # type: ignore
+from sentence_transformers import SentenceTransformer  # type: ignore
+from web_crawler import get_crawled_content
 
 # Bypass SSL verification if needed
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -21,7 +22,8 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 
 # Check if the API key is set
 if not openai_api_key:
-    raise ValueError("OpenAI API key not set. Please set it in the .env file")
+    st.error("OpenAI API key not set. Please set it in the .env file")
+    st.stop()
 
 # Initialize the OpenAI chat model
 llm = ChatOpenAI(
