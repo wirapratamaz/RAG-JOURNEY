@@ -1,46 +1,49 @@
-# RAG-JOURNEY
+## Installation
 
-## Overview Retrieval-Augmented Generation (RAG)
+1. **Clone the repository and navigate to the project directory:**
+   ```bash
+   git clone <repository-url>
+   cd CHATBOT-PY
+   ```
 
-Retrieval-Augmented Generation (RAG) is a technique designed to enhance the performance of Large Language Models (LLMs) by providing them with additional information from external knowledge sources. This approach allows for the generation of more accurate and contextually relevant responses while minimizing the occurrence of hallucinations.
+2. **Create and activate a virtual environment:**
+   ```bash
+   python -m venv myvenv
+   myvenv\Scripts\activate  # On Windows
+   # source myvenv/bin/activate  # On macOS/Linux
+   ```
 
-## Problem Statement
+3. **Install libraries and dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Traditionally, adapting neural networks to specific domains or proprietary information involves fine-tuning the model. While effective, this method is often:
-- Compute-intensive
-- Expensive
-- Requires technical expertise 
+4. **Get [OpenAI API key](https://platform.openai.com/account/api-keys) and set up environment variables:**
+   - Create a `.env` file in the root directory.
+   - Add the following:
+     ```env
+     OPENAI_API_KEY=your_openai_api_key
+     CRAWL_URL=https://is.undiksha.ac.id/
+     ```
 
-This makes it less agile in adapting to evolving information.
+5. **Install Playwright (if using asynchronous crawler):**
+   ```bash
+   playwright install chromium
+   ```
 
-## Solution
+## Running the Application
 
-In 2020, Lewis et al. proposed RAG in their paper *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. This approach combines a generative model with a retriever module, allowing for:
-- Easier updates to external knowledge sources
-- Flexibility in handling diverse information
+1. **Run the Streamlit app:**
+   ```bash
+   streamlit run src/main.py
+   ```
 
-## RAG Pipeline
-![image](https://github.com/user-attachments/assets/8c7fd4fc-4d7e-4801-a883-8b07d5a48470)
+2. **View the app in your browser at:**
+   - Local URL: `http://localhost:8501`
+   - Network URL: `http://<your-local-ip>:8501`
 
-The RAG pipeline consists of three main steps:
+## Usage
 
-1. **Retrieve**: 
-   - The user query is used to fetch relevant context from an external knowledge source.
-   - The query is embedded into a vector space that corresponds to the context in a vector database, enabling a similarity search to return the top k closest data objects.
+The assistant will now utilize the enhanced Crawl4AI crawler to fetch and process information from the specified website, providing more accurate and comprehensive responses.
 
-2. **Augment**: 
-   - The retrieved context is combined with the user query using a prompt template.
-
-3. **Generate**: 
-   - The augmented prompt is fed into the LLM to produce the final response.
-
-### Example
-
-Here’s a visualization of the RAG pipeline applied to a specific example:
-![image](https://github.com/user-attachments/assets/e1651b98-fcc1-440a-badc-0e49f86a4ac2)
-
-1. **User Query**: "What did the president say about Justice Breyer?"
-2. **Retrieve**: The context is retrieved from the vector database.
-   - Example Context: "The president thanked Justice Breyer for his service and acknowledged his dedication to serving the country."
-3. **Augment**: Combine the query and context into a prompt.
-4. **Generate**: The LLM processes this prompt to generate a comprehensive response.
+---

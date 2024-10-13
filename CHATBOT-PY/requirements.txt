@@ -9,3 +9,4 @@ langchain-core
 langchain-chroma
 fastapi
 uvicorn
+crawl4ai
