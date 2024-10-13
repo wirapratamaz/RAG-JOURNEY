@@ -6,6 +6,7 @@ from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.docstore.document import Document
 from web_crawler import get_crawled_content
+import PyPDF2
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,16 +22,22 @@ if not openai_api_key:
     raise ValueError("OpenAI API key not set. Please set it in the .env file")
 
 try:
-    # Read the FAQ file
-    faq_file_path = "si_faqs.txt"
-    if not os.path.exists(faq_file_path):
-        logger.error(f"FAQ file not found at path: {faq_file_path}")
-        raise FileNotFoundError(f"FAQ file not found at path: {faq_file_path}")
+    # Read the PDF dataset
+    pdf_file_path = os.path.join(os.path.dirname(__file__), '..', 'dataset', 'dataset.pdf')
+    if not os.path.exists(pdf_file_path):
+        logger.error(f"PDF dataset not found at path: {pdf_file_path}")
+        raise FileNotFoundError(f"PDF dataset not found at path: {pdf_file_path}")
 
-    with open(faq_file_path, "r", encoding="utf8") as file:
-        text = file.read()
-    
-    logger.info("Successfully read the FAQ file.")
+    with open(pdf_file_path, "rb") as file:
+        reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page_num in range(len(reader.pages)):
+            page = reader.pages[page_num]
+            extracted_text = page.extract_text()
+            if extracted_text:
+                text += extracted_text + "\n"
+
+    logger.info("Successfully extracted text from the PDF dataset.")
 
     # Crawl the website
     logger.info("Starting to crawl the website...")
@@ -46,8 +53,8 @@ try:
 
     # Split the combined text
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
+        chunk_size=2000,         # Increased chunk size for larger dataset
+        chunk_overlap=200,       # Increased overlap to maintain context
         separators=["\n\n", "\n", " ", ""]
     )
     split_texts = text_splitter.split_text(combined_text)

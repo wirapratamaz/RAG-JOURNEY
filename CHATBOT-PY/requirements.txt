@@ -10,3 +10,4 @@ langchain-chroma
 fastapi
 uvicorn
 crawl4ai
+PyPDF2
