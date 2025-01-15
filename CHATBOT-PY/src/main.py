@@ -43,24 +43,27 @@ def calculate_relevance_scores(chunk, query):
     # Return the similarity score as a list
     return similarity_score.flatten().tolist()
 
-def chunking_and_retrieval(user_input):
-    st.subheader("1. Chunking and Retrieval")
-    # Use the retriever to fetch relevant documents from the Chroma vector store
+def chunking_and_retrieval(user_input, show_process=True):
+    if show_process:
+        st.subheader("1. Chunking and Retrieval")
+    
     try:
-        # Retrieve documents related to the user input
         retrieved_docs = retriever.get_relevant_documents(user_input)
-        
-        # Prepare data for display
         embedded_data = []
+        
         for doc in retrieved_docs:
-            chunk = doc.page_content  # Extract content from the document
-            # Calculate relevance scores using the user input as the query
+            chunk = doc.page_content
             relevance_scores = calculate_relevance_scores(chunk, user_input)
             embedded_data.append((chunk, relevance_scores))
         
-        display_embedding_process(embedded_data)
+        if show_process:
+            display_embedding_process(embedded_data)
+            
+        return embedded_data
     except Exception as e:
-        st.warning(f"An error occurred during retrieval: {e}")
+        if show_process:
+            st.warning(f"An error occurred during retrieval: {e}")
+        return []
 
 def display_embedding_process(embedded_data):
     st.subheader("Embedding Process")
@@ -78,94 +81,97 @@ def display_embedding_process(embedded_data):
     
     st.success("Analisis informasi selesai!")
 
-def generation(user_input):
-    st.subheader("2. Generation")
-    with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..."):
-        # Simulate processing with a progress bar
-        progress_bar = st.progress(0)
-        for i in range(100):
-            time.sleep(0.01)
-            progress_bar.progress(i + 1)
-        
-        try:
-            # Get response from the chain
-            response = rag_chain.invoke({
-                "question": user_input,
-                "chat_history": st.session_state.get('chat_history', [])
-            })
-            
-            # Extract answer from response
-            if isinstance(response, dict) and "answer" in response:
-                answer = response["answer"]
-            else:
-                answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
-                
-        except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda."
+def generation(user_input, show_process=True):
+    if show_process:
+        st.subheader("2. Generation")
+        with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..."):
+            progress_bar = st.progress(0)
+            for i in range(100):
+                time.sleep(0.01)
+                progress_bar.progress(i + 1)
+    else:
+        with st.spinner("Generating response..."):
+            time.sleep(1)  # Minimal delay for user feedback
     
-    st.success("Jawaban siap! 🚀")
+    try:
+        response = rag_chain.invoke({
+            "question": user_input,
+            "chat_history": st.session_state.get('chat_history', [])
+        })
+        
+        if isinstance(response, dict) and "answer" in response:
+            answer = response["answer"]
+        else:
+            answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
+            
+    except Exception as e:
+        logger.error(f"Error generating response: {e}")
+        answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda."
+    
+    if show_process:
+        st.success("Jawaban siap! 🚀")
+        
     return answer
 
 def main():
     st.set_page_config(
-        page_title="SisInfoBot Undiksha",
+        page_title="Virtual Assistant SI Undiksha",
         page_icon="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s",
         layout="wide"
     )
     
-    # Sidebar
-    with st.sidebar:
-        st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=150)
-        st.title("SisInfo Undiksha")
-        st.selectbox("Model AI", ["GPT-3.5 Turbo"])
-        st.text("Universitas Pendidikan Ganesha")
-        st.markdown("---")
-        st.markdown("### 🌟 Fitur Unggulan:")
-        st.markdown("• Informasi Terkini Prodi")
-        st.markdown("• Panduan Akademik")
-        st.markdown("• Asisten Virtual Anda")
-    
-    # Main content
-    st.header("Selamat Datang di SisInfo Undiksha! 🤖💻")
-    st.info("Halo, Saya adalah asisten virtual khusus untuk mahasiswa Sistem Informasi Undiksha. Tanyakan apa saja seputar program studi, kurikulum, atau informasi yang berkaitan!")
-    
-    # Display chat history
+    # Initialize session state for chat history if it doesn't exist
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
-    for i, message in enumerate(st.session_state.chat_history):
-        if message["role"] == "user":
-            st.text_area("Anda:", value=message["content"], height=50, disabled=True, key=f"user_{i}")
-        else:
-            st.text_area("SisInfo:", value=message["content"], height=100, disabled=True, key=f"bot_{i}")
-    
-    # User input
-    user_input = st.text_input("Ada yang ingin Anda tanyakan tentang Sistem Informasi Undiksha?")
+    # Sidebar
+    with st.sidebar:
+        st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=150)
+        st.title("Virtual Assistant SI Undiksha")
+        mode = st.selectbox("Mode", ["User Mode", "Developer Mode"])
+        st.text("Universitas Pendidikan Ganesha")
+        st.markdown("---")
+        with st.expander("Lihat Info Terkini"):
+            latest_posts = get_latest_posts(formatted=True)
+            if latest_posts:
+                for post in latest_posts:
+                    st.markdown(f"- [{post['title']}]({post['link']})")
+            else:
+                st.info("Tidak ada informasi terkini saat ini.")
+
+    # Main content area
+    if not st.session_state.chat_history:
+        st.header("Selamat Datang di Virtual Assistant SI Undiksha! 🤖💻")
+        st.info("Halo, Saya adalah asisten virtual khusus untuk mahasiswa Sistem Informasi Undiksha. Tanyakan apa saja seputar program studi, kurikulum, atau informasi yang berkaitan!")
+
+    # Chat container
+    chat_container = st.container()
+    with chat_container:
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
+
+    # Chat input
+    user_input = st.chat_input("Ada yang ingin Anda tanyakan tentang Sistem Informasi Undiksha?")
     
     if user_input:
+        # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         
-        chunking_and_retrieval(user_input)
-        answer = generation(user_input)
+        # Determine if we should show processing details based on mode
+        show_process = mode == "Developer Mode"
         
+        # Process the query
+        if show_process:
+            chunking_and_retrieval(user_input, show_process)
+        
+        answer = generation(user_input, show_process)
+        
+        # Add assistant response to chat history
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         
-        st.subheader("Jawaban SisInfo:")
-        with st.container():
-            st.markdown(f"""
-           {answer}
-            """, unsafe_allow_html=True)
-
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📢 Info Terkini:")
-    with st.sidebar.expander("Lihat Info Terkini"):
-        latest_posts = get_latest_posts(formatted=True)
-        if latest_posts:
-            for post in latest_posts:
-                st.markdown(f"- [{post['title']}]({post['link']})")
-        else:
-            st.info("Tidak ada informasi terkini saat ini.")
+        # Use st.rerun() instead of st.experimental_rerun()
+        st.rerun()
 
 if __name__ == "__main__":
     # Initialize memory
