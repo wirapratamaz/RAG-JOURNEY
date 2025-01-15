@@ -152,10 +152,7 @@ def main():
         st.subheader("Jawaban SisInfo:")
         with st.container():
             st.markdown(f"""
-            <div style="background-color: #f0f2f6; border-radius: 10px; padding: 20px; border-left: 5px solid #4CAF50;">
-                <h4 style="color: #4CAF50;">Informasi untuk Anda:</h4>
-                <p style="color: #4CAF50; font-size: 16px; line-height: 1.6;">{answer}</p>
-            </div>
+           {answer}
             """, unsafe_allow_html=True)
         
         # # Add another input field for the next question
