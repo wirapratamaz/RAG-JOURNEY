@@ -25,11 +25,18 @@ async def scraping_undiksha_website(url=CRAWL_URL):
                 logger.info(f"Successfully scraped content from {url}")
                 return content
             else:
-                logger.warning(f"failed to retrieve content from {url}")
+                logger.warning(f"Failed to retrieve content from {url}")
                 return ""
     except Exception as e:
         logger.error(f"An error occurred while scraping {url}: {e}")
         return ""
 
-def get_scraped_content(url=CRAWL_URL):
-    return asyncio.run(scraping_undiksha_website(url))
+def get_crawled_content(url=CRAWL_URL):
+    """
+    Wrapper function to run the async scraping function
+    """
+    try:
+        return asyncio.run(scraping_undiksha_website(url))
+    except Exception as e:
+        logger.error(f"Error in get_crawled_content: {e}")
+        return ""

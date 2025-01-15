@@ -48,23 +48,22 @@ def process_and_embed_posts(posts):
         posts (list): List of post dictionaries fetched from RSS feed.
     """
     try:
-        texts = []
-        metadatas = []
+        # Combine all post content into a single text
+        combined_text = ""
         for post in posts:
             title = post.get('title', 'No Title')
             content = post.get('content', 'No Content')
-            full_text = f"{title}\n{content}"
-            texts.append(full_text)
-            metadatas.append({"source": "RSS Feed", "title": title, "link": post.get('link', '#')})
+            combined_text += f"Title: {title}\nContent: {content}\n\n"
 
         # Split texts into chunks
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = text_splitter.split_text(texts)
+        chunks = text_splitter.split_text(combined_text)
 
         # Initialize embeddings
         embeddings = OpenAIEmbeddings()
 
         # Add documents to the vector store
+        metadatas = [{"source": "RSS Feed"} for _ in chunks]
         vectorstore.add_texts(texts=chunks, metadatas=metadatas, embedding=embeddings)
         logging.info("Successfully embedded and added posts to the vector store.")
     except Exception as e:

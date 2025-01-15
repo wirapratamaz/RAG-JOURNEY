@@ -84,3 +84,27 @@ try:
 except Exception as e:
     logger.error(f"An error occurred: {e}")
     print(f"An error occurred: {e}")
+
+def update_vectorstore(new_content):
+    """
+    Updates the vector store with new content
+    """
+    try:
+        # Create new document objects from the content
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000,
+            chunk_overlap=200,
+            separators=["\n\n", "\n", " ", ""]
+        )
+        split_texts = text_splitter.split_text(new_content)
+        
+        # Create document objects
+        new_docs = [Document(page_content=chunk) for chunk in split_texts]
+        
+        # Add new documents to the existing vector store
+        vectorstore.add_documents(new_docs)
+        logger.info(f"Added {len(new_docs)} new documents to vector store")
+        
+    except Exception as e:
+        logger.error(f"Error updating vector store: {e}")
+        raise
