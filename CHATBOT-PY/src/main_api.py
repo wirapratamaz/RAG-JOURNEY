@@ -3,8 +3,9 @@ import sys
 import logging
 from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from scheduler import init_scheduler
+import atexit
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,12 @@ from src.api.api import router as api_router
 
 app = FastAPI()
 app.include_router(api_router, prefix="/api")
+
+# Initialize scheduler when the API starts
+scheduler = init_scheduler()
+
+# Shut down scheduler gracefully when the application stops
+atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
     import uvicorn

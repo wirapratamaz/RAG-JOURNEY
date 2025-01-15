@@ -2,16 +2,20 @@ import os
 import ssl
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from retriever import retriever
 import pandas as pd
 import time
 from fetch_posts import fetch_rss_posts, process_and_embed_posts, get_latest_posts
-from sklearn.metrics.pairwise import cosine_similarity  # type: ignore
-from sentence_transformers import SentenceTransformer  # type: ignore
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 from web_crawler import get_crawled_content
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Bypass SSL verification if needed
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -24,21 +28,6 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     st.error("OpenAI API key not set. Please set it in the .env file")
     st.stop()
-
-# Initialize the OpenAI chat model
-llm = ChatOpenAI(
-    model_name="gpt-3.5-turbo",
-    openai_api_key=openai_api_key
-)
-
-# Initialize the Conversational Retrieval Chain
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-qa_chain = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=retriever,
-    memory=memory,
-    return_source_documents=False
-)
 
 # Load a pre-trained model for embeddings
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -98,9 +87,22 @@ def generation(user_input):
             time.sleep(0.01)
             progress_bar.progress(i + 1)
         
-        # Get response from the chain
-        response = qa_chain.invoke({"question": user_input})
-        answer = response["answer"]
+        try:
+            # Get response from the chain
+            response = rag_chain.invoke({
+                "question": user_input,
+                "chat_history": st.session_state.get('chat_history', [])
+            })
+            
+            # Extract answer from response
+            if isinstance(response, dict) and "answer" in response:
+                answer = response["answer"]
+            else:
+                answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
+                
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda."
     
     st.success("Jawaban siap! 🚀")
     return answer
@@ -152,14 +154,8 @@ def main():
         st.subheader("Jawaban SisInfo:")
         with st.container():
             st.markdown(f"""
-            <div style="background-color: #f0f2f6; border-radius: 10px; padding: 20px; border-left: 5px solid #4CAF50;">
-                <h4 style="color: #4CAF50;">Informasi untuk Anda:</h4>
-                <p style="color: #4CAF50; font-size: 16px; line-height: 1.6;">{answer}</p>
-            </div>
+           {answer}
             """, unsafe_allow_html=True)
-        
-        # # Add another input field for the next question
-        # st.text_input("Ada pertanyaan lain?", key="next_question")
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📢 Info Terkini:")
@@ -172,4 +168,27 @@ def main():
             st.info("Tidak ada informasi terkini saat ini.")
 
 if __name__ == "__main__":
+    # Initialize memory
+    if 'memory' not in st.session_state:
+        st.session_state.memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            output_key="answer",  # Specify which output to store
+            return_messages=True
+        )
+
+    # Initialize the OpenAI chat model
+    llm = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        openai_api_key=openai_api_key
+    )
+
+    # Create the RAG chain
+    rag_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=retriever,
+        memory=st.session_state.memory,
+        return_source_documents=True,
+        verbose=True
+    )
+
     main()
