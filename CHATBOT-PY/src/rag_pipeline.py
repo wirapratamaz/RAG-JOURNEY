@@ -40,17 +40,23 @@ class RAGPipeline:
     def setup_retriever(self):
         """Set up an advanced retriever with contextual compression"""
         base_retriever = self.vector_store.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": 4}
+            search_type="mmr",  # Changed to MMR for better diversity in results
+            search_kwargs={
+                "k": 12,        # Increased from 8 to 12 to get more chunks
+                "fetch_k": 30,  # Increased from 20 to 30
+                "lambda_mult": 0.7,  # Controls diversity vs relevance trade-off
+                "score_threshold": 0.3  # Lowered threshold to get more potential matches
+            }
         )
         
         # Create a compressor that will help extract most relevant parts of documents
         compressor = LLMChainExtractor.from_llm(self.llm)
         
-        # Create a contextual compression retriever
+        # Create a contextual compression retriever with custom kwargs
         compression_retriever = ContextualCompressionRetriever(
             base_compressor=compressor,
-            base_retriever=base_retriever
+            base_retriever=base_retriever,
+            compression_kwargs={"min_chunk_length": 50}  # Ensure we don't compress too aggressively
         )
         
         return compression_retriever
@@ -59,6 +65,12 @@ class RAGPipeline:
         """Set up the QA chain with custom prompt"""
         prompt_template = """You are an AI assistant for Undiksha University. Use the following pieces of context to answer the question at the end. 
         If you don't know the answer, just say that you don't know, don't try to make up an answer.
+        
+        When formatting responses with bullet points:
+        1. Start with an introductory sentence followed by a line break
+        2. Each bullet point should be on a new line
+        3. Use bullet points (•) for each item
+        4. Add proper spacing between bullet points
         
         Context: {context}
         

@@ -1,19 +1,16 @@
 import os
 from dotenv import load_dotenv
-from langchain_openai import OpenAIEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
 # Load environment variables from .env file
 load_dotenv()
 
-openai_api_key = os.getenv("OPENAI_API_KEY")
-
-if not openai_api_key:
-    raise ValueError("OpenAI API key not set. Please set it in the .env file")
-
 try:
-    # Initialize OpenAI embeddings
-    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+    # Initialize HuggingFace embeddings
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
 
     # Initialize Chroma vector store
     persist_directory = "./chroma_db"

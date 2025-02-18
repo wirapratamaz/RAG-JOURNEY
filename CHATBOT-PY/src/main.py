@@ -149,7 +149,7 @@ def main():
     with chat_container:
         for message in st.session_state.chat_history:
             with st.chat_message(message["role"]):
-                st.write(message["content"])
+                st.markdown(message["content"])
 
     # Chat input
     user_input = st.chat_input("Ada yang ingin Anda tanyakan tentang Sistem Informasi Undiksha?")

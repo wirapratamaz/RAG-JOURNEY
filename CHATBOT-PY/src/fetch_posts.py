@@ -2,7 +2,7 @@ import requests
 import logging
 import feedparser
 from retriever import vectorstore
-from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 logging.basicConfig(level=logging.INFO)
@@ -56,11 +56,17 @@ def process_and_embed_posts(posts):
             combined_text += f"Title: {title}\nContent: {content}\n\n"
 
         # Split texts into chunks
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=300,
+            separators=["\n\n", "\n", "•", " ", ""]
+        )
         chunks = text_splitter.split_text(combined_text)
 
         # Initialize embeddings
-        embeddings = OpenAIEmbeddings()
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        )
 
         # Add documents to the vector store
         metadatas = [{"source": "RSS Feed"} for _ in chunks]
