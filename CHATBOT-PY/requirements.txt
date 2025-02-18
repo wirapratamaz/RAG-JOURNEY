@@ -16,3 +16,4 @@ deepeval
 APScheduler
 sentence-transformers
 scikit-learn
+feedparser
