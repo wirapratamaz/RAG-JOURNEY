@@ -5,7 +5,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.docstore.document import Document
-from web_crawler import get_crawled_content
 import PyPDF2
 
 # Configure logging
@@ -22,34 +21,33 @@ if not openai_api_key:
     raise ValueError("OpenAI API key not set. Please set it in the .env file")
 
 try:
-    # Read the PDF dataset
-    pdf_file_path = os.path.join(os.path.dirname(__file__), '..', 'dataset', 'dataset.pdf')
-    if not os.path.exists(pdf_file_path):
-        logger.error(f"PDF dataset not found at path: {pdf_file_path}")
-        raise FileNotFoundError(f"PDF dataset not found at path: {pdf_file_path}")
+    # Get all PDF files from the dataset directory
+    dataset_dir = os.path.join(os.path.dirname(__file__), '..', 'dataset')
+    if not os.path.exists(dataset_dir):
+        logger.error(f"Dataset directory not found at path: {dataset_dir}")
+        raise FileNotFoundError(f"Dataset directory not found at path: {dataset_dir}")
 
-    with open(pdf_file_path, "rb") as file:
-        reader = PyPDF2.PdfReader(file)
-        text = ""
-        for page_num in range(len(reader.pages)):
-            page = reader.pages[page_num]
-            extracted_text = page.extract_text()
-            if extracted_text:
-                text += extracted_text + "\n"
-
-    logger.info("Successfully extracted text from the PDF dataset.")
-
-    # Crawl the website
-    logger.info("Starting to crawl the website...")
-    web_content = get_crawled_content()
+    combined_text = ""
+    pdf_files = [f for f in os.listdir(dataset_dir) if f.endswith('.pdf')]
     
-    if not web_content:
-        logger.warning("No content fetched from the website.")
-    else:
-        logger.info("Successfully crawled the website.")
+    if not pdf_files:
+        logger.error("No PDF files found in the dataset directory")
+        raise FileNotFoundError("No PDF files found in the dataset directory")
 
-    # Combine both sources
-    combined_text = text + "\n" + web_content
+    # Process each PDF file
+    for pdf_file in pdf_files:
+        pdf_path = os.path.join(dataset_dir, pdf_file)
+        logger.info(f"Processing PDF file: {pdf_file}")
+        
+        with open(pdf_path, "rb") as file:
+            reader = PyPDF2.PdfReader(file)
+            for page_num in range(len(reader.pages)):
+                page = reader.pages[page_num]
+                extracted_text = page.extract_text()
+                if extracted_text:
+                    combined_text += extracted_text + "\n\n"
+        
+        logger.info(f"Successfully extracted text from {pdf_file}")
 
     # Split the combined text
     text_splitter = RecursiveCharacterTextSplitter(
@@ -77,10 +75,7 @@ try:
     )
     logger.info(f"Initialized Chroma vector store at '{persist_directory}'.")
 
-    # Persist the vector store
-    # No need to call vectorstore.persist() as Chroma handles persistence during initialization
-
-    print("Success!")
+    print("Success! All PDF files have been processed and stored in the vector database.")
 except Exception as e:
     logger.error(f"An error occurred: {e}")
     print(f"An error occurred: {e}")
