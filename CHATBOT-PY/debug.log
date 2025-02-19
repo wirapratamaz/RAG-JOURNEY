@@ -1,0 +1,62 @@
+/Users/wirapratama/Desktop/RAG-JOURNEY/CHATBOT-PY/src/retriever.py:11: LangChainDeprecationWarning: The class `HuggingFaceEmbeddings` was deprecated in LangChain 0.2.2 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-huggingface package and should be used instead. To use it run `pip install -U :class:`~langchain-huggingface` and import as `from :class:`~langchain_huggingface import HuggingFaceEmbeddings``.
+  embeddings = HuggingFaceEmbeddings(
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: mps
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-02-19 12:09:45.630 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.632 WARNING streamlit.runtime.state.session_state_proxy: Session state does not function when running a script without `streamlit run`
+/Users/wirapratama/Desktop/RAG-JOURNEY/CHATBOT-PY/src/main.py:179: LangChainDeprecationWarning: Please see the migration guide at: https://python.langchain.com/docs/versions/migrating_memory/
+  st.session_state.memory = ConversationBufferMemory(
+2025-02-19 12:09:45.632 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.633 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.666 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.706 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.706 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.706 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.706 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.707 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.707 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.715 
+  Warning: to view this Streamlit app on a browser, run it with the following
+  command:
+
+    streamlit run src/main.py [ARGUMENTS]
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:45.716 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+INFO:root:Fetched 5 posts from RSS feed.
+INFO:sentence_transformers.SentenceTransformer:Use pytorch device_name: mps
+INFO:sentence_transformers.SentenceTransformer:Load pretrained SentenceTransformer: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+INFO:root:Successfully embedded and added posts to the vector store.
+2025-02-19 12:09:52.635 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.635 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.636 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.637 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-02-19 12:09:52.637 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.

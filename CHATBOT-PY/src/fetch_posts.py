@@ -2,7 +2,7 @@ import requests
 import logging
 import feedparser
 from retriever import vectorstore
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 logging.basicConfig(level=logging.INFO)

@@ -7,6 +7,7 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.docstore.document import Document
 from web_crawler import get_crawled_content
 import PyPDF2
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -63,18 +64,52 @@ try:
 
     # Split the combined text
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1500,         # Increased chunk size to keep more context
-        chunk_overlap=500,       # Increased overlap to maintain bullet point context
-        separators=["\n\n", "\n• ", "\n", "• ", " ", ""],  # Added more bullet point separators
+        chunk_size=3000,         # Increased to keep more context together
+        chunk_overlap=1000,      # Increased overlap to maintain better context between chunks
+        separators=[
+            "\n=== End of",
+            "\n=== Start of",
+            "\n## ",            # Added section headers
+            "\nBagaimana ",     # Added question markers
+            "\nJawaban ",       # Added answer markers
+            "\n\n",
+            "\n• ",
+            "\n",
+            "• ",
+            " ",
+            ""
+        ],
         length_function=len,
-        keep_separator=True      # Keep the separators to maintain formatting
+        keep_separator=True
     )
-    split_texts = text_splitter.split_text(combined_text)
+
+    # Pre-process text to protect Google Drive links
+    drive_pattern = r'(https://drive\.google\.com/\S+)'
+    
+    # Find all drive links and replace them with special markers
+    drive_links = re.findall(drive_pattern, combined_text)
+    marked_text = combined_text
+    for idx, link in enumerate(drive_links):
+        marker = f"[DRIVE_LINK_{idx}]"
+        marked_text = marked_text.replace(link, marker)
+    
+    # Split the text
+    split_texts = text_splitter.split_text(marked_text)
     logger.info(f"Split the combined text into {len(split_texts)} chunks.")
+
+    # Restore drive links in chunks
+    restored_texts = []
+    for chunk in split_texts:
+        restored_chunk = chunk
+        for idx, link in enumerate(drive_links):
+            marker = f"[DRIVE_LINK_{idx}]"
+            if marker in chunk:
+                restored_chunk = restored_chunk.replace(marker, link)
+        restored_texts.append(restored_chunk)
 
     # Create document objects with metadata
     docs = []
-    for chunk in split_texts:
+    for chunk in restored_texts:
         # Try to determine the source file from the chunk content
         source = "unknown"
         for filename in os.listdir(dataset_dir):
@@ -84,9 +119,15 @@ try:
         if "=== Start of Web Content ===" in chunk:
             source = "web_content"
             
+        # Extract any drive links in this chunk for metadata
+        chunk_links = re.findall(drive_pattern, chunk)
+        
         docs.append(Document(
             page_content=chunk,
-            metadata={"source": source}
+            metadata={
+                "source": source,
+                "drive_links": ','.join(chunk_links) if chunk_links else ""  # Join links into a string
+            }
         ))
     logger.info("Created document objects from split texts.")
 
