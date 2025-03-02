@@ -133,7 +133,7 @@ try:
 
     # Initialize embeddings
     embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        model_name="all-MiniLM-L6-v2"
     )
     logger.info("Initialized HuggingFace embeddings.")
 

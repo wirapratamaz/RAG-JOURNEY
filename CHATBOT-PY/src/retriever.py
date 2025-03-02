@@ -8,8 +8,9 @@ load_dotenv()
 
 try:
     # Initialize HuggingFace embeddings
+    # Using all-MiniLM-L6-v2 which has 384 dimensions
     embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+        model_name="all-MiniLM-L6-v2"
     )
 
     # Initialize Chroma vector store

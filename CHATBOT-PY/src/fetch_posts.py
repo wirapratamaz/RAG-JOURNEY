@@ -65,7 +65,7 @@ def process_and_embed_posts(posts):
 
         # Initialize embeddings
         embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+            model_name="all-MiniLM-L6-v2"
         )
 
         # Add documents to the vector store

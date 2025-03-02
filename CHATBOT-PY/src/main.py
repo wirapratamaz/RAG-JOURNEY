@@ -13,6 +13,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from web_crawler import get_crawled_content
 import logging
+from langchain.prompts import ChatPromptTemplate, PromptTemplate
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -94,9 +95,22 @@ def generation(user_input, show_process=True):
             time.sleep(1)  # Minimal delay for user feedback
     
     try:
+        # Convert chat history to the format expected by the RAG chain
+        formatted_history = []
+        for msg in st.session_state.get('chat_history', []):
+            if len(formatted_history) > 0 and msg["role"] == "user":
+                # Only include the most recent conversation pairs to avoid context overflow
+                if len(formatted_history) > 4:
+                    formatted_history = formatted_history[-4:]
+                formatted_history.append((msg["content"], ""))
+            elif len(formatted_history) > 0 and msg["role"] == "assistant":
+                last_pair = formatted_history[-1]
+                formatted_history[-1] = (last_pair[0], msg["content"])
+        
+        # Call the RAG chain with the formatted history
         response = rag_chain.invoke({
             "question": user_input,
-            "chat_history": st.session_state.get('chat_history', [])
+            "chat_history": formatted_history
         })
         
         if isinstance(response, dict) and "answer" in response:
@@ -187,6 +201,21 @@ if __name__ == "__main__":
         model_name="gpt-3.5-turbo",
         openai_api_key=openai_api_key
     )
+    
+    # Create a custom prompt template
+    custom_prompt = PromptTemplate(
+        template="""Use the following pieces of context to answer the user's question.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+Always prioritize information from the context over your general knowledge.
+Provide a comprehensive and detailed answer based on the context provided.
+
+Context: {context}
+
+Question: {question}
+
+Answer:""",
+        input_variables=["context", "question"]
+    )
 
     # Create the RAG chain
     rag_chain = ConversationalRetrievalChain.from_llm(
@@ -194,7 +223,8 @@ if __name__ == "__main__":
         retriever=retriever,
         memory=st.session_state.memory,
         return_source_documents=True,
-        verbose=True
+        verbose=True,
+        combine_docs_chain_kwargs={"prompt": custom_prompt}
     )
 
     main()
