@@ -2,12 +2,36 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try to fix sqlite3 version issues by using pysqlite3 if available
+try:
+    import sqlite3
+    sqlite_version = sqlite3.sqlite_version_info
+    if sqlite_version < (3, 35, 0):
+        logger.warning(f"SQLite version {sqlite3.sqlite_version} is too old for ChromaDB (needs 3.35.0+)")
+        logger.info("Attempting to use pysqlite3 instead...")
+        try:
+            __import__('pysqlite3')
+            sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+            import sqlite3
+            logger.info(f"Successfully replaced sqlite3 with pysqlite3 (version: {sqlite3.sqlite_version})")
+        except ImportError:
+            logger.error("pysqlite3 not available. Will use fallback retriever.")
+except Exception as e:
+    logger.error(f"Error handling sqlite3: {e}")
+
+# Now try to import langchain_chroma
+try:
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_chroma import Chroma
+    logger.info("Successfully imported langchain_chroma")
+except Exception as e:
+    logger.error(f"Error importing langchain_chroma: {e}")
+    # We'll fall back to the DummyRetriever below
 
 # Load environment variables from .env file
 load_dotenv()

@@ -10,57 +10,40 @@ logger = logging.getLogger(__name__)
 # Add the current directory to the Python path
 sys.path.insert(0, os.path.abspath("."))
 
-# Check for API key first
+# Function to check if OpenAI API key is available
 def check_api_key():
-    api_key = None
-    try:
-        # Try to get from Streamlit secrets
-        api_key = st.secrets.get("OPENAI_API_KEY")
-        if api_key:
-            logger.info("Found API key in Streamlit secrets")
-            return True
-    except Exception as e:
-        logger.error(f"Error accessing Streamlit secrets: {e}")
-    
-    # Try to get from .env file
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-        api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
-            logger.info("Found API key in .env file")
-            return True
-    except Exception as e:
-        logger.error(f"Error loading .env file: {e}")
-    
-    # If we get here, no API key was found
-    logger.error("No OpenAI API key found")
-    st.error("OpenAI API key not found. Please add it to your .streamlit/secrets.toml file or .env file.")
-    
-    # Show instructions for adding API key to Streamlit Cloud
-    st.subheader("How to add your API key to Streamlit Cloud:")
-    st.markdown("""
-    1. Go to your Streamlit Cloud dashboard
-    2. Find your app and click on it
-    3. Go to "Settings" > "Secrets"
-    4. Add your OpenAI API key in the following format:
-       ```
-       OPENAI_API_KEY = "your-actual-api-key-here"
-       ```
-    5. Save the changes and rerun your app
-    """)
-    
-    return False
+    openai_api_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
+    if not openai_api_key:
+        logger.error("OpenAI API key not found.")
+        st.error("OpenAI API key not found. Please set OPENAI_API_KEY in your environment or secrets.")
+        return False
+    logger.info("Found API key in Streamlit secrets")
+    return True
 
 # Function to run the main app
 def run_main_app():
     try:
-        # First check if langchain_chroma is available
+        # First check if langchain_chroma can be safely imported
         try:
+            # Try to check sqlite3 version first
+            import sqlite3
+            sqlite_version = sqlite3.sqlite_version_info
+            if sqlite_version < (3, 35, 0):
+                logger.warning(f"SQLite version {sqlite3.sqlite_version} is too old for ChromaDB (needs 3.35.0+)")
+                # Since we don't have proper SQLite version and pysqlite3 may not be available,
+                # we'll directly use the fallback
+                logger.error("Using alternative implementation due to SQLite version issue")
+                import simple_retriever
+                sys.modules['src.retriever'] = simple_retriever
+                raise ImportError("Forcing fallback due to SQLite version issue")
+                
+            # If SQLite version is OK, try importing langchain_chroma
             import langchain_chroma
-            logger.info("langchain_chroma is installed")
-        except ImportError:
-            logger.error("langchain_chroma is not installed, using alternative implementation")
+            import chromadb
+            logger.info("langchain_chroma and chromadb are installed and working properly")
+        except (ImportError, RuntimeError, AttributeError) as e:
+            logger.error(f"Error with vector database dependencies: {e}")
+            logger.error("Using alternative implementation")
             # Create a symbolic link to our alternative implementation
             import simple_retriever
             sys.modules['src.retriever'] = simple_retriever
@@ -68,9 +51,11 @@ def run_main_app():
         # Try to import the main function from src/main.py
         logger.info("Attempting to import main app")
         from src.main import main
+        # If import successful, return the main function
         return main
-    except ImportError as e:
-        logger.error(f"Failed to import main app: {e}")
+    except Exception as e:
+        logger.error(f"Error importing main app: {e}")
+        st.error(f"Error loading the main application: {e}")
         return None
 
 # Function to run the simple app
@@ -173,28 +158,105 @@ def run_debug_app():
     4. Check the logs for more detailed error messages
     """)
 
+# Function to create a very simple UI if everything else fails
+def create_fallback_ui():
+    st.set_page_config(
+        page_title="SI Undiksha Assistant (Fallback Mode)",
+        page_icon="🔄",
+        layout="wide"
+    )
+    
+    st.title("SI Undiksha Assistant (Fallback Mode)")
+    st.warning("⚠️ The full application could not be loaded due to technical issues.")
+    
+    st.markdown("""
+    ### What can I help you with?
+    
+    I can still answer basic questions about Sistem Informasi Undiksha based on my general knowledge.
+    
+    However, specific document searching capabilities are currently unavailable.
+    """)
+    
+    # Initialize session state
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Get user input
+    prompt = st.chat_input("What would you like to know about SI Undiksha?")
+    
+    # Process user input
+    if prompt:
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Prepare API call
+        openai_api_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
+        
+        if not openai_api_key:
+            st.error("API key not available. Cannot generate response.")
+            return
+        
+        # Display assistant response
+        with st.chat_message("assistant"):
+            try:
+                from langchain_openai import ChatOpenAI
+                llm = ChatOpenAI(
+                    model_name="gpt-3.5-turbo",
+                    openai_api_key=openai_api_key
+                )
+                
+                message_placeholder = st.empty()
+                full_response = ""
+                
+                # Create a simple system message
+                system_message = """You are a virtual assistant for Sistem Informasi Undiksha (Universitas Pendidikan Ganesha).
+                Answer user questions about the program, curriculum, and university based on your general knowledge.
+                Be polite, helpful, and concise. If you don't know something specific, be honest about it."""
+                
+                # Generate response
+                for chunk in llm.stream({
+                    "system": system_message,
+                    "human": prompt
+                }):
+                    full_response += chunk.content
+                    message_placeholder.markdown(full_response + "▌")
+                
+                message_placeholder.markdown(full_response)
+                
+                # Add assistant response to chat history
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                
+            except Exception as e:
+                st.error(f"Error generating response: {e}")
+                st.info("The assistant is currently unavailable. Please try again later.")
+
+# Main entry point of the application
 if __name__ == "__main__":
-    # First check if we have an API key
+    # Check if key is available first
     if not check_api_key():
         st.stop()
-    
+
     # Try to run the main app first
     main_func = run_main_app()
     
     if main_func:
         # If main app loaded successfully, run it
-        logger.info("Main app loaded successfully")
         main_func()
     else:
-        # Try the simple app
-        logger.info("Trying simple app")
-        simple_func = run_simple_app()
-        
-        if simple_func:
-            # If simple app loaded successfully, run it
-            logger.info("Simple app loaded successfully")
-            simple_func()
-        else:
-            # Fall back to debug mode
-            logger.info("Falling back to debug mode")
-            run_debug_app() 
+        # If main app failed, try to run the simpler app
+        logger.warning("Main app failed, attempting to create a fallback UI")
+        try:
+            create_fallback_ui()
+        except Exception as e:
+            logger.error(f"Fallback UI also failed: {e}")
+            st.error("Unfortunately, the application could not be loaded due to technical issues.")
+            st.info("Please try again later or contact support.") 
