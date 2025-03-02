@@ -1,5 +1,5 @@
 myvenv
 .env
-chroma_db
 __pycache__
 .vercel
+# chroma_db is now included in Git for deployment

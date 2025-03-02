@@ -9,24 +9,21 @@ logger = logging.getLogger(__name__)
 
 # Try to fix sqlite3 version issues by using pysqlite3 if available
 try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    
+    # Now import sqlite3 again to verify it's been replaced
+    import sqlite3
+    logger.info(f"Successfully replaced sqlite3 with pysqlite3 (version: {sqlite3.sqlite_version})")
+except ImportError:
+    # If pysqlite3 is not available, check the existing SQLite version
     import sqlite3
     sqlite_version = sqlite3.sqlite_version_info
     if sqlite_version < (3, 35, 0):
         logger.warning(f"SQLite version {sqlite3.sqlite_version} is too old for ChromaDB (needs 3.35.0+)")
-        
-        # Use a conditional import pattern that avoids linter errors
-        pysqlite3 = None  # type: ignore
-        try:
-            import pysqlite3  # type: ignore
-            sys.modules['sqlite3'] = pysqlite3
-            # Import sqlite3 again to verify it's been replaced
-            import sqlite3
-            logger.info(f"Successfully replaced sqlite3 with pysqlite3 (version: {sqlite3.sqlite_version})")
-        except ImportError:
-            logger.warning("pysqlite3 is not installed. You may need to:")
-            logger.warning("1. Install a newer version of SQLite")
-            logger.warning("2. Or manually install pysqlite3 from source")
-            logger.warning("Attempting to continue with the existing SQLite version...")
+        logger.warning("Please add pysqlite3-binary to your requirements.txt")
+        logger.warning("Attempting to continue with the existing SQLite version...")
 except Exception as e:
     logger.error(f"Error handling sqlite3: {e}")
     raise ImportError(f"Failed to initialize database dependencies: {e}")
@@ -83,22 +80,14 @@ try:
 
     # Always start with a fresh database in deployment
     if os.environ.get('STREAMLIT_SHARING_MODE') == 'streamlit_app' or 'STREAMLIT_RUNTIME' in os.environ:
-        logger.info("Detected Streamlit deployment environment - using clean database approach")
-        try:
-            # In deployment, prioritize a clean database to avoid schema issues
-            if os.path.exists(persist_directory):
-                import shutil
-                # Keep backup just in case
-                backup_dir = f"{persist_directory}_backup"
-                if os.path.exists(backup_dir):
-                    shutil.rmtree(backup_dir)
-                shutil.copytree(persist_directory, backup_dir)
-                # Create fresh directory
-                shutil.rmtree(persist_directory)
-                os.makedirs(persist_directory, exist_ok=True)
-                logger.info("Created fresh database directory in Streamlit environment")
-        except Exception as e:
-            logger.warning(f"Error handling directory in Streamlit: {e}")
+        logger.info("Detected Streamlit deployment environment - using existing database from repo")
+        # We no longer delete the database in deployment since we're storing it in Git
+        # Instead, just make sure the directory exists
+        if not os.path.exists(persist_directory):
+            os.makedirs(persist_directory, exist_ok=True)
+            logger.warning(f"Created chroma_db directory in Streamlit environment at {persist_directory}")
+        else:
+            logger.info(f"Using existing chroma_db in Streamlit environment at {persist_directory}")
     
     try:
         # First try with allow_reset=True to handle schema migrations
