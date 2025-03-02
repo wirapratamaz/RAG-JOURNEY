@@ -35,6 +35,71 @@ if not openai_api_key:
 # Load a pre-trained model for embeddings
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
+# Initialize global variables
+rag_chain = None
+
+def initialize_rag_chain():
+    """Initialize the RAG chain for conversational retrieval"""
+    global rag_chain
+    
+    try:
+        # Initialize memory if not already done
+        if 'memory' not in st.session_state:
+            st.session_state.memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                output_key="answer",  # Specify which output to store
+                return_messages=True
+            )
+        
+        # Initialize the OpenAI chat model
+        llm = ChatOpenAI(
+            model_name="gpt-3.5-turbo",
+            openai_api_key=openai_api_key
+        )
+        
+        # Create a custom prompt template
+        custom_prompt = PromptTemplate(
+            template="""Use the following pieces of context to answer the user's question.
+IMPORTANT: Your answer must be based EXCLUSIVELY on the context provided. DO NOT include any information that is not explicitly stated in the context.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+Do not add any explanatory details that are not present in the context.
+Do not elaborate beyond what is directly stated in the context.
+Provide a comprehensive answer based ONLY on the information in the context provided.
+
+Context: {context}
+
+Question: {question}
+
+Answer:""",
+            input_variables=["context", "question"]
+        )
+        
+        # Verify that retriever is available
+        if retriever is None:
+            logger.error("Retriever is None - cannot initialize RAG chain")
+            raise ValueError("Retriever is not available")
+            
+        # Create the RAG chain
+        logger.info("Creating RAG chain with retriever and memory")
+        chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=retriever,
+            memory=st.session_state.memory,
+            return_source_documents=True,
+            verbose=True,
+            combine_docs_chain_kwargs={"prompt": custom_prompt}
+        )
+        
+        # Set the global variable
+        rag_chain = chain
+        logger.info("Successfully initialized RAG chain")
+        
+        return chain
+    except Exception as e:
+        logger.error(f"Error initializing RAG chain: {e}", exc_info=True)
+        # Don't set the global variable if there was an error
+        return None
+
 def calculate_relevance_scores(chunk, query):
     # Generate embeddings for the chunk and the query
     chunk_embedding = model.encode([chunk])
@@ -85,6 +150,19 @@ def display_embedding_process(embedded_data):
     st.success("Analisis informasi selesai!")
 
 def generation(user_input, show_process=True):
+    global rag_chain
+    
+    # Ensure rag_chain is initialized
+    try:
+        if rag_chain is None:
+            logger.info("Initializing RAG chain for the first time")
+            rag_chain = initialize_rag_chain()
+            if rag_chain is None:
+                raise ValueError("Failed to initialize rag_chain properly")
+    except Exception as e:
+        logger.error(f"Failed to initialize RAG chain: {e}")
+        return "Maaf, sistem tidak dapat memproses pertanyaan Anda saat ini. Terjadi masalah dalam inisialisasi komponen pencarian."
+    
     if show_process:
         st.subheader("2. Generation")
         with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..."):
@@ -109,6 +187,11 @@ def generation(user_input, show_process=True):
                 last_pair = formatted_history[-1]
                 formatted_history[-1] = (last_pair[0], msg["content"])
         
+        # Add additional logging to track what's happening
+        logger.debug(f"Formatted history: {formatted_history}")
+        logger.debug(f"Current question: {user_input}")
+        logger.debug(f"RAG chain type: {type(rag_chain)}")
+        
         # Call the RAG chain with the formatted history
         response = rag_chain.invoke({
             "question": user_input,
@@ -118,11 +201,16 @@ def generation(user_input, show_process=True):
         if isinstance(response, dict) and "answer" in response:
             answer = response["answer"]
         else:
+            logger.warning(f"Unexpected response format: {response}")
             answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
             
     except Exception as e:
-        logger.error(f"Error generating response: {e}")
-        answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda."
+        logger.error(f"Error generating response: {e}", exc_info=True)
+        # Provide more informative error message
+        if "name 'rag_chain' is not defined" in str(e):
+            answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini."
+        else:
+            answer = f"Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Detail: {str(e)}"
     
     if show_process:
         st.success("Jawaban siap! 🚀")
@@ -190,45 +278,16 @@ def main():
         st.rerun()
 
 if __name__ == "__main__":
-    # Initialize memory
-    if 'memory' not in st.session_state:
-        st.session_state.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            output_key="answer",  # Specify which output to store
-            return_messages=True
-        )
-
-    # Initialize the OpenAI chat model
-    llm = ChatOpenAI(
-        model_name="gpt-3.5-turbo",
-        openai_api_key=openai_api_key
-    )
-    
-    # Create a custom prompt template
-    custom_prompt = PromptTemplate(
-        template="""Use the following pieces of context to answer the user's question.
-IMPORTANT: Your answer must be based EXCLUSIVELY on the context provided. DO NOT include any information that is not explicitly stated in the context.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Do not add any explanatory details that are not present in the context.
-Do not elaborate beyond what is directly stated in the context.
-Provide a comprehensive answer based ONLY on the information in the context provided.
-
-Context: {context}
-
-Question: {question}
-
-Answer:""",
-        input_variables=["context", "question"]
-    )
-
-    # Create the RAG chain
-    rag_chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=retriever,
-        memory=st.session_state.memory,
-        return_source_documents=True,
-        verbose=True,
-        combine_docs_chain_kwargs={"prompt": custom_prompt}
-    )
-
+    # Initialize the RAG chain at startup
+    try:
+        logger.info("Initializing RAG chain at application startup")
+        initialized_chain = initialize_rag_chain()
+        if initialized_chain is None:
+            logger.error("Failed to initialize RAG chain at startup - app may have limited functionality")
+        else:
+            logger.info("RAG chain successfully initialized at startup")
+    except Exception as e:
+        logger.error(f"Error during startup initialization: {e}", exc_info=True)
+        
+    # Run the main application
     main()
