@@ -14,5 +14,6 @@ PyPDF2>=3.0.1
 python-multipart>=0.0.6
 tiktoken>=0.5.2
 streamlit>=1.31.0
+feedparser>=6.0.0
 textdistance[extras]==4.5.0
 python-Levenshtein>=0.21.1
