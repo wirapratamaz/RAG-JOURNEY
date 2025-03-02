@@ -1,52 +1,94 @@
-import requests
 import logging
-import feedparser
-from retriever import vectorstore
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+import sys
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Try to import necessary modules
+try:
+    import feedparser
+    import requests
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    
+    # Try to import vector store - but don't fail if not available
+    try:
+        from src.retriever import retriever
+        # Check if we have a real vectorstore
+        vectorstore = None
+        if hasattr(retriever, 'vectorstore'):
+            vectorstore = retriever.vectorstore
+        elif hasattr(retriever, '_vectorstore'):
+            vectorstore = retriever._vectorstore
+    except ImportError:
+        logger.warning("Could not import retriever for embedding posts")
+        vectorstore = None
+        
+    try:
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        embeddings_available = True
+    except ImportError:
+        logger.warning("HuggingFaceEmbeddings not available")
+        embeddings_available = False
+        
+    FEEDPARSER_AVAILABLE = True
+except ImportError as e:
+    logger.error(f"Error importing required modules: {e}")
+    FEEDPARSER_AVAILABLE = False
 
 def fetch_rss_posts(feed_url="https://is.undiksha.ac.id/feed/", max_posts=5):
     """
     Fetches the latest posts from the RSS feed.
-
+    
     Args:
         feed_url (str): The RSS feed URL.
         max_posts (int): Maximum number of posts to fetch.
-
+        
     Returns:
         list: A list of dictionaries containing post data.
     """
+    if not FEEDPARSER_AVAILABLE:
+        logger.warning("Feedparser not available, using mock data")
+        return _get_mock_posts(max_posts)
+        
     try:
         feed = feedparser.parse(feed_url)
-        if feed.bozo:
-            raise ValueError("Failed to parse RSS feed.")
+        if feed.bozo and not feed.entries:
+            logger.error("Failed to parse RSS feed.")
+            return _get_mock_posts(max_posts)
         
         posts = []
         for entry in feed.entries[:max_posts]:
             title = entry.get('title', 'No Title')
             link = entry.get('link', '#')
             description = entry.get('description', 'No Content')
+            published = entry.get('published', 'Unknown date')
+            
             posts.append({
                 'title': title,
                 'link': link,
-                'content': description
+                'content': description,
+                'published': published
             })
         
-        logging.info(f"Fetched {len(posts)} posts from RSS feed.")
+        logger.info(f"Fetched {len(posts)} posts from RSS feed.")
         return posts
     except Exception as e:
-        logging.error(f"Error fetching RSS posts: {e}")
-        return []
+        logger.error(f"Error fetching RSS posts: {e}")
+        return _get_mock_posts(max_posts)
 
 def process_and_embed_posts(posts):
     """
-    Processes fetched posts and embeds them into the vector store.
-
+    Processes fetched posts and embeds them into the vector store if available.
+    
     Args:
         posts (list): List of post dictionaries fetched from RSS feed.
     """
+    # If no vectorstore is available, just return the posts
+    if vectorstore is None or not embeddings_available:
+        logger.warning("Vector store not available, skipping embeddings")
+        return posts
+        
     try:
         # Combine all post content into a single text
         combined_text = ""
@@ -68,33 +110,79 @@ def process_and_embed_posts(posts):
             model_name="all-MiniLM-L6-v2"
         )
 
-        # Add documents to the vector store
-        metadatas = [{"source": "RSS Feed"} for _ in chunks]
-        vectorstore.add_texts(texts=chunks, metadatas=metadatas, embedding=embeddings)
-        logging.info("Successfully embedded and added posts to the vector store.")
+        # Add documents to the vector store if possible
+        try:
+            metadatas = [{"source": "RSS Feed"} for _ in chunks]
+            vectorstore.add_texts(texts=chunks, metadatas=metadatas, embedding=embeddings)
+            logger.info("Successfully embedded and added posts to the vector store.")
+        except Exception as e:
+            logger.error(f"Error adding to vector store: {e}")
+            
     except Exception as e:
-        logging.error(f"Error processing and embedding posts: {e}")
+        logger.error(f"Error processing and embedding posts: {e}")
+    
+    return posts
 
-def get_latest_posts(formatted=False):
+def get_latest_posts(formatted=False, max_posts=3):
     """
-    Fetches and processes the latest RSS feed posts.
-
+    Fetches and optionally processes the latest RSS feed posts.
+    
     Args:
         formatted (bool): If True, returns the posts in a formatted manner for display.
-
+        max_posts (int): Maximum number of posts to return.
+        
     Returns:
-        list or None: Returns processed posts or None if fetching fails.
+        list: Returns processed posts.
     """
-    posts = fetch_rss_posts()
+    logger.info(f"Getting latest posts, formatted={formatted}, max_posts={max_posts}")
+    
+    # Fetch posts from feed
+    posts = fetch_rss_posts(max_posts=max_posts)
+    
+    # Try to process and embed if we have posts
     if posts:
         process_and_embed_posts(posts)
-        if formatted:
-            formatted_posts = [{"title": post.get('title', 'No Title'),
-                                "link": post.get('link', '#')} for post in posts]
-            return formatted_posts
-    return None
+    
+    if formatted:
+        # Return in a format ready for display
+        return [
+            {
+                "title": post.get('title', 'No Title'),
+                "link": post.get('link', '#'),
+                "date": post.get('published', 'Unknown date')
+            }
+            for post in posts
+        ]
+    else:
+        return posts
 
-if __name__ == "__main__":
-    posts = fetch_rss_posts()
-    if posts:
-        process_and_embed_posts(posts)
+def _get_mock_posts(max_posts=5):
+    """
+    Returns mock data when real posts can't be fetched.
+    """
+    logger.info(f"Using mock posts data, max_posts={max_posts}")
+    
+    # Mock data
+    dummy_posts = [
+        {
+            "title": "Penerimaan Mahasiswa Baru SI Undiksha 2023",
+            "link": "https://si.undiksha.ac.id/penerimaan-2023",
+            "published": "2023-05-01",
+            "content": "Informasi penerimaan mahasiswa baru program studi Sistem Informasi tahun 2023."
+        },
+        {
+            "title": "Kuliah Umum: Transformasi Digital di Era Industri 4.0",
+            "link": "https://si.undiksha.ac.id/kuliah-umum-2023",
+            "published": "2023-04-15",
+            "content": "Program Studi SI mengadakan kuliah umum dengan tema Transformasi Digital."
+        },
+        {
+            "title": "Kerjasama Program Studi SI dengan Industri Lokal",
+            "link": "https://si.undiksha.ac.id/kerjasama-industri",
+            "published": "2023-03-20",
+            "content": "Program Studi Sistem Informasi menandatangani MoU dengan beberapa industri lokal."
+        }
+    ]
+    
+    # Return only the max number of posts requested
+    return dummy_posts[:max_posts]

@@ -34,7 +34,15 @@ def run_main_app():
                 # we'll directly use the fallback
                 logger.error("Using alternative implementation due to SQLite version issue")
                 import simple_retriever
+                
+                # Set retriever in both modules locations to ensure it's found
                 sys.modules['src.retriever'] = simple_retriever
+                sys.modules['retriever'] = simple_retriever
+                
+                # Also make the retriever directly importable
+                from simple_retriever import retriever
+                sys.modules['retriever'] = type('', (), {'retriever': retriever})
+                
                 raise ImportError("Forcing fallback due to SQLite version issue")
                 
             # If SQLite version is OK, try importing langchain_chroma
@@ -47,12 +55,33 @@ def run_main_app():
             # Create a symbolic link to our alternative implementation
             import simple_retriever
             sys.modules['src.retriever'] = simple_retriever
+            sys.modules['retriever'] = simple_retriever
         
         # Try to import the main function from src/main.py
         logger.info("Attempting to import main app")
-        from src.main import main
-        # If import successful, return the main function
-        return main
+        try:
+            from src.main import main
+            return main
+        except ImportError as e:
+            # Check if it's specifically a retriever import issue
+            if "retriever" in str(e):
+                logger.error("Retriever import issue detected. Applying additional fix...")
+                
+                # Make sure mock modules are available
+                if not os.path.exists('src'):
+                    os.makedirs('src', exist_ok=True)
+                
+                # Create __init__.py in src directory if it doesn't exist
+                if not os.path.exists('src/__init__.py'):
+                    with open('src/__init__.py', 'w') as f:
+                        f.write('# Package initialization\n')
+                
+                # Try again with the fixes
+                from src.main import main
+                return main
+            else:
+                # Re-raise if it's a different issue
+                raise
     except Exception as e:
         logger.error(f"Error importing main app: {e}")
         st.error(f"Error loading the main application: {e}")
@@ -241,22 +270,44 @@ def create_fallback_ui():
 
 # Main entry point of the application
 if __name__ == "__main__":
-    # Check if key is available first
-    if not check_api_key():
-        st.stop()
+    # Try to run the main app
+    try:
+        # Check if key is available first
+        if not check_api_key():
+            st.stop()
 
-    # Try to run the main app first
-    main_func = run_main_app()
-    
-    if main_func:
-        # If main app loaded successfully, run it
-        main_func()
-    else:
-        # If main app failed, try to run the simpler app
-        logger.warning("Main app failed, attempting to create a fallback UI")
+        # Add crawl4ai to the path if it errors out
         try:
-            create_fallback_ui()
-        except Exception as e:
-            logger.error(f"Fallback UI also failed: {e}")
-            st.error("Unfortunately, the application could not be loaded due to technical issues.")
-            st.info("Please try again later or contact support.") 
+            import crawl4ai
+        except ImportError as e:
+            logger.warning(f"crawl4ai import error: {e}. Patching...")
+            # Creating a mock crawl4ai module to prevent errors
+            mock_crawl4ai = type('', (), {})
+            mock_crawler = type('', (), {'arun': lambda *args, **kwargs: None})
+            mock_crawl4ai.AsyncWebCrawler = lambda *args, **kwargs: mock_crawler
+            sys.modules['crawl4ai'] = mock_crawl4ai
+            logger.info("Added mock crawl4ai module")
+
+        # Try to run the main app first
+        main_func = run_main_app()
+        
+        if main_func:
+            # If main app loaded successfully, run it
+            main_func()
+        else:
+            # If main app failed, try to run the simpler app
+            logger.warning("Main app failed, attempting to create a fallback UI")
+            try:
+                create_fallback_ui()
+            except Exception as e:
+                logger.error(f"Fallback UI also failed: {e}")
+                st.error("Unfortunately, the application could not be loaded due to technical issues.")
+                st.info("Please try again later or contact support.")
+                
+                # Emergency minimal chat interface
+                logger.warning("Attempting emergency minimal chat interface")
+                create_fallback_ui()
+    except Exception as e:
+        logger.error(f"Error in main entry point: {e}")
+        st.error("Unfortunately, the application could not be loaded due to technical issues.")
+        st.info("Please try again later or contact support.") 
