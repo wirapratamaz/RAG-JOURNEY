@@ -14,15 +14,29 @@ try:
     if sqlite_version < (3, 35, 0):
         logger.warning(f"SQLite version {sqlite3.sqlite_version} is too old for ChromaDB (needs 3.35.0+)")
         logger.info("Attempting to use pysqlite3 instead...")
+        
+        # Try to use pysqlite3 instead (multiple methods)
+        # Method 1: Direct import if available
         try:
-            __import__('pysqlite3')
-            sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+            import pysqlite3
+            sys.modules['sqlite3'] = pysqlite3
+            # Import sqlite3 again to verify it's been replaced
             import sqlite3
             logger.info(f"Successfully replaced sqlite3 with pysqlite3 (version: {sqlite3.sqlite_version})")
         except ImportError:
-            logger.error("pysqlite3 not available. Will use fallback retriever.")
+            # Method 2: Try to install it dynamically if possible
+            try:
+                import subprocess
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "pysqlite3-binary", "--no-cache-dir"])
+                import pysqlite3
+                sys.modules['sqlite3'] = pysqlite3
+                logger.info("Successfully installed and patched sqlite3 with pysqlite3")
+            except Exception as e:
+                logger.error(f"pysqlite3 not available and couldn't be installed: {e}")
+                raise ImportError("Cannot fix sqlite3 version issues")
 except Exception as e:
     logger.error(f"Error handling sqlite3: {e}")
+    raise ImportError(f"Failed to initialize database dependencies: {e}")
 
 # Now try to import langchain_chroma
 try:
@@ -31,7 +45,7 @@ try:
     logger.info("Successfully imported langchain_chroma")
 except Exception as e:
     logger.error(f"Error importing langchain_chroma: {e}")
-    # We'll fall back to the DummyRetriever below
+    raise ImportError(f"Failed to import langchain_chroma: {e}")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -77,8 +91,8 @@ try:
     logger.info("Successfully initialized retriever from Chroma")
 except Exception as e:
     logger.error(f"Error initializing retriever: {e}")
-    retriever = DummyRetriever()
-    logger.warning("Using DummyRetriever as fallback")
+    # Re-raise the exception to make sure the app knows there's a problem
+    raise ImportError(f"Failed to initialize vector store: {e}")
 
 # Export retriever for easy import
 __all__ = ['retriever']

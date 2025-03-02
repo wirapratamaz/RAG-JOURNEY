@@ -23,39 +23,41 @@ def check_api_key():
 # Function to run the main app
 def run_main_app():
     try:
-        # First check if langchain_chroma can be safely imported
+        # First check if we can patch sqlite3 for ChromaDB
         try:
             # Try to check sqlite3 version first
             import sqlite3
             sqlite_version = sqlite3.sqlite_version_info
             if sqlite_version < (3, 35, 0):
                 logger.warning(f"SQLite version {sqlite3.sqlite_version} is too old for ChromaDB (needs 3.35.0+)")
-                # Since we don't have proper SQLite version and pysqlite3 may not be available,
-                # we'll directly use the fallback
-                logger.error("Using alternative implementation due to SQLite version issue")
-                import simple_retriever
+                logger.info("Attempting to patch sqlite3 with pysqlite3...")
                 
-                # Set retriever in both modules locations to ensure it's found
-                sys.modules['src.retriever'] = simple_retriever
-                sys.modules['retriever'] = simple_retriever
-                
-                # Also make the retriever directly importable
-                from simple_retriever import retriever
-                sys.modules['retriever'] = type('', (), {'retriever': retriever})
-                
-                raise ImportError("Forcing fallback due to SQLite version issue")
-                
-            # If SQLite version is OK, try importing langchain_chroma
+                # Try to use pysqlite3 instead
+                try:
+                    # First try to import without installing
+                    import pysqlite3
+                    sys.modules['sqlite3'] = pysqlite3
+                    logger.info("Successfully patched sqlite3 with existing pysqlite3")
+                except ImportError:
+                    # If not available, try to install it
+                    logger.info("pysqlite3 not found, attempting to install...")
+                    import subprocess
+                    try:
+                        subprocess.check_call([sys.executable, "-m", "pip", "install", "pysqlite3-binary"])
+                        import pysqlite3
+                        sys.modules['sqlite3'] = pysqlite3
+                        logger.info("Successfully installed and patched sqlite3 with pysqlite3")
+                    except Exception as e:
+                        logger.error(f"Failed to install pysqlite3: {e}")
+                        raise ImportError(f"Cannot use ChromaDB due to SQLite version: {sqlite_version}")
+            
+            # Now try importing langchain_chroma
             import langchain_chroma
             import chromadb
             logger.info("langchain_chroma and chromadb are installed and working properly")
         except (ImportError, RuntimeError, AttributeError) as e:
             logger.error(f"Error with vector database dependencies: {e}")
-            logger.error("Using alternative implementation")
-            # Create a symbolic link to our alternative implementation
-            import simple_retriever
-            sys.modules['src.retriever'] = simple_retriever
-            sys.modules['retriever'] = simple_retriever
+            raise ImportError(f"ChromaDB cannot be initialized: {e}")
         
         # Try to import the main function from src/main.py
         logger.info("Attempting to import main app")
