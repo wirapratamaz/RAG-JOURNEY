@@ -23,11 +23,13 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 # Load environment variables
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
+
+# Get API key: first check Streamlit secrets, then .env file
+openai_api_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
 
 # Check if the API key is set
 if not openai_api_key:
-    st.error("OpenAI API key not set. Please set it in the .env file")
+    st.error("OpenAI API key not set. Please set it in the .env file or Streamlit secrets.")
     st.stop()
 
 # Load a pre-trained model for embeddings

@@ -90,4 +90,40 @@ For more detailed documentation, refer to the following resources:
 - [Langchain Python Docs](https://python.langchain.com/v0.2/docs/introduction/)
 - [Langchain Conversational RAG Docs](https://python.langchain.com/v0.2/docs/tutorials/qa_chat_history/)
 
+## Deployment to Streamlit Community Cloud
+
+To deploy this application to Streamlit Community Cloud, follow these steps:
+
+1. **Create a GitHub repository** for your project if you haven't already.
+
+2. **Push your code to GitHub**:
+   ```bash
+   git add .
+   git commit -m "Prepare for Streamlit deployment"
+   git push origin main
+   ```
+
+3. **Sign in to Streamlit Community Cloud**:
+   - Go to [Streamlit Community Cloud](https://share.streamlit.io/)
+   - Sign in with your GitHub account
+
+4. **Deploy your app**:
+   - Click "New app"
+   - Select your GitHub repository
+   - Set the main file path to `streamlit_app.py`
+   - Click "Deploy"
+
+5. **Set up secrets**:
+   - In the Streamlit Cloud dashboard, find your app
+   - Click on "Settings" > "Secrets"
+   - Add your OpenAI API key and any other required secrets:
+     ```
+     OPENAI_API_KEY = "your-openai-api-key"
+     ```
+
+6. **Advanced settings** (if needed):
+   - You can specify Python version, packages, or other requirements in the Advanced settings section
+
+Your app will now be deployed and publicly accessible via the URL provided by Streamlit!
+
 ![alt text](image.png)
