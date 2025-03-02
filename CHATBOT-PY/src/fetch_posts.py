@@ -113,8 +113,42 @@ def process_and_embed_posts(posts):
         # Add documents to the vector store if possible
         try:
             metadatas = [{"source": "RSS Feed"} for _ in chunks]
-            vectorstore.add_texts(texts=chunks, metadatas=metadatas, embedding=embeddings)
-            logger.info("Successfully embedded and added posts to the vector store.")
+            
+            # Try different methods of adding documents based on the ChromaDB version
+            try:
+                # First try add_texts with embedding parameter (older versions)
+                vectorstore.add_texts(texts=chunks, metadatas=metadatas, embedding=embeddings)
+                logger.info("Successfully added documents using add_texts with embedding parameter")
+            except (TypeError, ValueError) as e:
+                logger.warning(f"First add method failed: {e}, trying alternative methods...")
+                
+                try:
+                    # Try add_texts without embedding parameter (newer versions)
+                    vectorstore.add_texts(texts=chunks, metadatas=metadatas)
+                    logger.info("Successfully added documents using add_texts without embedding parameter")
+                except Exception as e2:
+                    logger.warning(f"Second add method failed: {e2}, trying direct client access...")
+                    
+                    try:
+                        # Try accessing the collection directly if possible
+                        if hasattr(vectorstore, "_collection"):
+                            collection = vectorstore._collection
+                            # Generate embeddings manually
+                            text_embeddings = embeddings.embed_documents(chunks)
+                            # Add via the collection
+                            collection.add(
+                                embeddings=text_embeddings,
+                                documents=chunks,
+                                metadatas=metadatas,
+                                ids=[f"rss-{i}" for i in range(len(chunks))]
+                            )
+                            logger.info("Successfully added documents using direct collection access")
+                        else:
+                            raise ValueError("No _collection attribute found")
+                    except Exception as e3:
+                        logger.error(f"All embedding methods failed: {e3}")
+                        raise
+                        
         except Exception as e:
             logger.error(f"Error adding to vector store: {e}")
             

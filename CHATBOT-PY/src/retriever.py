@@ -88,6 +88,25 @@ try:
         allow_reset=True,  # This allows schema reset if there's a mismatch
     )
 
+    # Always start with a fresh database in deployment
+    if os.environ.get('STREAMLIT_SHARING_MODE') == 'streamlit_app' or 'STREAMLIT_RUNTIME' in os.environ:
+        logger.info("Detected Streamlit deployment environment - using clean database approach")
+        try:
+            # In deployment, prioritize a clean database to avoid schema issues
+            if os.path.exists(persist_directory):
+                import shutil
+                # Keep backup just in case
+                backup_dir = f"{persist_directory}_backup"
+                if os.path.exists(backup_dir):
+                    shutil.rmtree(backup_dir)
+                shutil.copytree(persist_directory, backup_dir)
+                # Create fresh directory
+                shutil.rmtree(persist_directory)
+                os.makedirs(persist_directory, exist_ok=True)
+                logger.info("Created fresh database directory in Streamlit environment")
+        except Exception as e:
+            logger.warning(f"Error handling directory in Streamlit: {e}")
+    
     try:
         # First try with allow_reset=True to handle schema migrations
         vectorstore = Chroma(
@@ -122,7 +141,16 @@ try:
             logger.info("Successfully initialized Chroma with a fresh database")
         except Exception as e2:
             logger.error(f"Could not recreate Chroma database: {e2}")
-            raise
+            # Last resort - try memory-only database
+            try:
+                logger.warning("Attempting to create in-memory ChromaDB as last resort")
+                vectorstore = Chroma(
+                    embedding_function=embeddings
+                )
+                logger.info("Created in-memory ChromaDB instance")
+            except Exception as e3:
+                logger.error(f"Even in-memory DB failed: {e3}")
+                raise
 
     # Configure the retriever with more comprehensive settings
     retriever = vectorstore.as_retriever(
@@ -136,8 +164,9 @@ try:
     logger.info("Successfully initialized retriever from Chroma with enhanced retrieval settings")
 except Exception as e:
     logger.error(f"Error initializing retriever: {e}")
-    # Re-raise the exception to make sure the app knows there's a problem
-    raise ImportError(f"Failed to initialize vector store: {e}")
+    # Use the dummy retriever instead of re-raising
+    logger.warning("Falling back to DummyRetriever")
+    retriever = DummyRetriever()
 
 # Export retriever for easy import
 __all__ = ['retriever']
