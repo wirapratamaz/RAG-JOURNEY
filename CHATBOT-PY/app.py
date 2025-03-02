@@ -13,11 +13,26 @@ sys.path.insert(0, os.path.abspath("."))
 # Function to check if OpenAI API key is available
 def check_api_key():
     openai_api_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
+    
+    # Check if the key exists
     if not openai_api_key:
         logger.error("OpenAI API key not found.")
         st.error("OpenAI API key not found. Please set OPENAI_API_KEY in your environment or secrets.")
         return False
-    logger.info("Found API key in Streamlit secrets")
+    
+    # Check if it's a placeholder value
+    placeholder_values = ["your-api-key-here", "your-openai-api-key", "sk-..."]
+    if any(placeholder in openai_api_key.lower() for placeholder in placeholder_values):
+        logger.error("OpenAI API key appears to be a placeholder value.")
+        st.error("The OpenAI API key appears to be a placeholder. Please set your actual API key in Streamlit secrets or .env file.")
+        return False
+        
+    # Check key format - most OpenAI keys start with 'sk-'
+    if not (openai_api_key.startswith('sk-') or openai_api_key.startswith('sk-proj-')):
+        logger.warning("OpenAI API key format appears unusual. It should typically start with 'sk-'")
+        # Continue anyway, as API key formats can change
+    
+    logger.info("Found valid API key in Streamlit secrets or environment variables")
     return True
 
 # Function to run the main app
@@ -234,6 +249,12 @@ def create_fallback_ui():
         
         if not openai_api_key:
             st.error("API key not available. Cannot generate response.")
+            return
+
+        # Check if it's a placeholder value
+        placeholder_values = ["your-api-key-here", "your-openai-api-key", "sk-..."]
+        if any(placeholder in openai_api_key.lower() for placeholder in placeholder_values):
+            st.error("The OpenAI API key appears to be a placeholder. Please set your actual API key.")
             return
         
         # Display assistant response
