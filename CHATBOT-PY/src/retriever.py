@@ -13,27 +13,20 @@ try:
     sqlite_version = sqlite3.sqlite_version_info
     if sqlite_version < (3, 35, 0):
         logger.warning(f"SQLite version {sqlite3.sqlite_version} is too old for ChromaDB (needs 3.35.0+)")
-        logger.info("Attempting to use pysqlite3 instead...")
         
-        # Try to use pysqlite3 instead (multiple methods)
-        # Method 1: Direct import if available
+        # Use a conditional import pattern that avoids linter errors
+        pysqlite3 = None  # type: ignore
         try:
-            import pysqlite3
+            import pysqlite3  # type: ignore
             sys.modules['sqlite3'] = pysqlite3
             # Import sqlite3 again to verify it's been replaced
             import sqlite3
             logger.info(f"Successfully replaced sqlite3 with pysqlite3 (version: {sqlite3.sqlite_version})")
         except ImportError:
-            # Method 2: Try to install it dynamically if possible
-            try:
-                import subprocess
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "pysqlite3-binary", "--no-cache-dir"])
-                import pysqlite3
-                sys.modules['sqlite3'] = pysqlite3
-                logger.info("Successfully installed and patched sqlite3 with pysqlite3")
-            except Exception as e:
-                logger.error(f"pysqlite3 not available and couldn't be installed: {e}")
-                raise ImportError("Cannot fix sqlite3 version issues")
+            logger.warning("pysqlite3 is not installed. You may need to:")
+            logger.warning("1. Install a newer version of SQLite")
+            logger.warning("2. Or manually install pysqlite3 from source")
+            logger.warning("Attempting to continue with the existing SQLite version...")
 except Exception as e:
     logger.error(f"Error handling sqlite3: {e}")
     raise ImportError(f"Failed to initialize database dependencies: {e}")

@@ -59,16 +59,21 @@ def initialize_rag_chain():
         
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
-            template="""Use the following pieces of context to answer the user's question comprehensively.
-IMPORTANT: Ensure your answer is COMPLETE and includes ALL relevant information from the context provided.
-If the context mentions a list or steps, make sure to include ALL of them in your answer.
+            template="""Use the following pieces of context to answer the user's question concisely.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-For questions about processes or stages, like thesis completion:
-1. Identify ALL stages or steps mentioned in the context
-2. Present them in the EXACT order and with the EXACT names as they appear in the context
-3. Do NOT combine, rename, or reorganize the stages
-4. Include all details for each stage exactly as presented in the context
+IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
+1. For questions about processes or stages (like thesis completion), follow this format EXACTLY:
+   - Start with "Terdapat [number] tahap utama dalam [process], yaitu:"
+   - Present each stage as a SEPARATE PARAGRAPH (not as bullet points)
+   - For each stage paragraph, start with the stage name in bold, followed by a description
+   - Make sure to use the EXACT stage names as mentioned in the context
+   - End with a paragraph about who is involved in the process
+
+2. For the thesis completion process specifically:
+   - Ensure the four stages are: Pengajuan Topik, Ujian Proposal Skripsi, Penyusunan Skripsi, and Pengesahan Laporan Skripsi
+   - Format each stage as a complete paragraph, not a bullet point
+   - Add a final concluding sentence about who is involved in the entire process
 
 Context: {context}
 
