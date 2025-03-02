@@ -2,6 +2,7 @@ langchain>=0.1.5
 langchain-community>=0.0.17
 langchain-openai>=0.0.5
 chromadb>=0.4.22
+langchain-chroma>=0.0.6
 openai>=1.10.0
 python-dotenv>=1.0.0
 fastapi>=0.109.2
