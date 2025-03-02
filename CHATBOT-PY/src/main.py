@@ -59,12 +59,16 @@ def initialize_rag_chain():
         
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
-            template="""Use the following pieces of context to answer the user's question.
-IMPORTANT: Your answer must be based EXCLUSIVELY on the context provided. DO NOT include any information that is not explicitly stated in the context.
+            template="""Use the following pieces of context to answer the user's question comprehensively.
+IMPORTANT: Ensure your answer is COMPLETE and includes ALL relevant information from the context provided.
+If the context mentions a list or steps, make sure to include ALL of them in your answer.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Do not add any explanatory details that are not present in the context.
-Do not elaborate beyond what is directly stated in the context.
-Provide a comprehensive answer based ONLY on the information in the context provided.
+
+For questions about processes or stages, like thesis completion:
+1. Identify ALL stages or steps mentioned in the context
+2. Present them in the EXACT order and with the EXACT names as they appear in the context
+3. Do NOT combine, rename, or reorganize the stages
+4. Include all details for each stage exactly as presented in the context
 
 Context: {context}
 
@@ -146,6 +150,11 @@ def display_embedding_process(embedded_data):
         
         df = pd.DataFrame(data)
         st.dataframe(df)
+        
+        # Add a section to display the full raw text of all chunks for better debugging
+        st.subheader("Full Retrieved Content")
+        full_content = "\n\n---\n\n".join([chunk for chunk, _ in embedded_data])
+        st.text_area("All retrieved chunks (raw text):", full_content, height=300)
     
     st.success("Analisis informasi selesai!")
 

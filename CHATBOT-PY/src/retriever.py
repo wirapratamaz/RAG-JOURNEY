@@ -87,8 +87,16 @@ try:
         persist_directory=persist_directory
     )
 
-    retriever = vectorstore.as_retriever()
-    logger.info("Successfully initialized retriever from Chroma")
+    # Configure the retriever with more comprehensive settings
+    retriever = vectorstore.as_retriever(
+        search_type="mmr",  # Use Maximum Marginal Relevance for better diversity
+        search_kwargs={
+            "k": 12,  # Increase number of retrieved documents further
+            "fetch_k": 20,  # Fetch more documents initially before filtering
+            "lambda_mult": 0.5,  # Better balance between relevance and diversity (lower value = more diversity)
+        }
+    )
+    logger.info("Successfully initialized retriever from Chroma with enhanced retrieval settings")
 except Exception as e:
     logger.error(f"Error initializing retriever: {e}")
     # Re-raise the exception to make sure the app knows there's a problem

@@ -64,14 +64,16 @@ try:
 
     # Split the combined text
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=3000,         # Increased to keep more context together
-        chunk_overlap=1000,      # Increased overlap to maintain better context between chunks
+        chunk_size=1500,         # Reduced chunk size to avoid splitting important information
+        chunk_overlap=500,       # Substantial overlap to maintain context between chunks
         separators=[
             "\n=== End of",
             "\n=== Start of",
-            "\n## ",            # Added section headers
-            "\nBagaimana ",     # Added question markers
-            "\nJawaban ",       # Added answer markers
+            "\n## ",            
+            "\nBagaimana ",     
+            "\nJawaban ",       
+            "\nProses ",        # Added for thesis process sections
+            "\nTahapan ",       # Added for thesis stages sections
             "\n\n",
             "\n• ",
             "\n",
