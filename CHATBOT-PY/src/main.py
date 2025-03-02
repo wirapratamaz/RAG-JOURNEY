@@ -205,9 +205,11 @@ if __name__ == "__main__":
     # Create a custom prompt template
     custom_prompt = PromptTemplate(
         template="""Use the following pieces of context to answer the user's question.
+IMPORTANT: Your answer must be based EXCLUSIVELY on the context provided. DO NOT include any information that is not explicitly stated in the context.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Always prioritize information from the context over your general knowledge.
-Provide a comprehensive and detailed answer based on the context provided.
+Do not add any explanatory details that are not present in the context.
+Do not elaborate beyond what is directly stated in the context.
+Provide a comprehensive answer based ONLY on the information in the context provided.
 
 Context: {context}
 
