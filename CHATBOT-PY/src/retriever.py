@@ -42,7 +42,8 @@ except Exception as e:
 try:
     from langchain_community.embeddings import HuggingFaceEmbeddings
     from langchain_chroma import Chroma
-    logger.info("Successfully imported langchain_chroma")
+    import chromadb
+    logger.info("Successfully imported langchain_chroma and chromadb")
 except Exception as e:
     logger.error(f"Error importing langchain_chroma: {e}")
     raise ImportError(f"Failed to import langchain_chroma: {e}")
@@ -81,11 +82,47 @@ try:
         model_name="all-MiniLM-L6-v2"
     )
 
-    # Initialize Chroma vector store
-    vectorstore = Chroma(
-        embedding_function=embeddings,
-        persist_directory=persist_directory
+    # Handle potential schema mismatch by creating client settings
+    client_settings = chromadb.Settings(
+        anonymized_telemetry=False,
+        allow_reset=True,  # This allows schema reset if there's a mismatch
     )
+
+    try:
+        # First try with allow_reset=True to handle schema migrations
+        vectorstore = Chroma(
+            embedding_function=embeddings,
+            persist_directory=persist_directory,
+            client_settings=client_settings
+        )
+        logger.info("Successfully initialized Chroma with client settings")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Chroma with existing DB, trying to recreate: {e}")
+        
+        # If that fails, try to create a clean database by deleting and recreating
+        try:
+            import shutil
+            # Backup the old directory first
+            if os.path.exists(persist_directory):
+                backup_dir = f"{persist_directory}_backup"
+                logger.info(f"Backing up existing chroma_db to {backup_dir}")
+                if os.path.exists(backup_dir):
+                    shutil.rmtree(backup_dir)
+                shutil.copytree(persist_directory, backup_dir)
+                
+                # Remove the problematic directory
+                shutil.rmtree(persist_directory)
+                os.makedirs(persist_directory, exist_ok=True)
+            
+            # Initialize a fresh Chroma instance
+            vectorstore = Chroma(
+                embedding_function=embeddings,
+                persist_directory=persist_directory
+            )
+            logger.info("Successfully initialized Chroma with a fresh database")
+        except Exception as e2:
+            logger.error(f"Could not recreate Chroma database: {e2}")
+            raise
 
     # Configure the retriever with more comprehensive settings
     retriever = vectorstore.as_retriever(
