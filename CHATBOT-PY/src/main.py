@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from retriever import retriever
+from src.retriever import retriever
 import pandas as pd
 import time
-from fetch_posts import fetch_rss_posts, process_and_embed_posts, get_latest_posts
+from src.fetch_posts import fetch_rss_posts, process_and_embed_posts, get_latest_posts
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
-from web_crawler import get_crawled_content
+from src.web_crawler import get_crawled_content
 import logging
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 

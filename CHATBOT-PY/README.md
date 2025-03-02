@@ -110,7 +110,10 @@ To deploy this application to Streamlit Community Cloud, follow these steps:
 4. **Deploy your app**:
    - Click "New app"
    - Select your GitHub repository
-   - Set the main file path to `streamlit_app.py`
+   - Set the main file path to one of:
+     - `streamlit_app.py` (Main app with full functionality)
+     - `simple_app.py` (Simplified version if you encounter issues)
+     - `debug_app.py` (Diagnostic app if you need to troubleshoot)
    - Click "Deploy"
 
 5. **Set up secrets**:
@@ -123,6 +126,13 @@ To deploy this application to Streamlit Community Cloud, follow these steps:
 
 6. **Advanced settings** (if needed):
    - You can specify Python version, packages, or other requirements in the Advanced settings section
+
+7. **Troubleshooting Deployment Issues**:
+   - If you encounter import errors, try deploying `simple_app.py` or `debug_app.py` first
+   - Check that all dependencies are in `requirements.txt`
+   - Make sure all import paths are correct (use `from src.module import something` instead of `from module import something`)
+   - Ensure your Chroma database is properly initialized
+   - Check the Streamlit Cloud logs for detailed error messages
 
 Your app will now be deployed and publicly accessible via the URL provided by Streamlit!
 
