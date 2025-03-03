@@ -48,14 +48,14 @@ def fetch_rss_posts(feed_url="https://is.undiksha.ac.id/feed/", max_posts=5):
         list: A list of dictionaries containing post data.
     """
     if not FEEDPARSER_AVAILABLE:
-        logger.warning("Feedparser not available, using mock data")
-        return _get_mock_posts(max_posts)
+        logger.warning("Feedparser not available, returning empty list")
+        return []
         
     try:
         feed = feedparser.parse(feed_url)
         if feed.bozo and not feed.entries:
             logger.error("Failed to parse RSS feed.")
-            return _get_mock_posts(max_posts)
+            return []
         
         posts = []
         for entry in feed.entries[:max_posts]:
@@ -75,7 +75,7 @@ def fetch_rss_posts(feed_url="https://is.undiksha.ac.id/feed/", max_posts=5):
         return posts
     except Exception as e:
         logger.error(f"Error fetching RSS posts: {e}")
-        return _get_mock_posts(max_posts)
+        return []
 
 def process_and_embed_posts(posts):
     """
@@ -189,34 +189,3 @@ def get_latest_posts(formatted=False, max_posts=3):
         ]
     else:
         return posts
-
-def _get_mock_posts(max_posts=5):
-    """
-    Returns mock data when real posts can't be fetched.
-    """
-    logger.info(f"Using mock posts data, max_posts={max_posts}")
-    
-    # Mock data
-    dummy_posts = [
-        {
-            "title": "Penerimaan Mahasiswa Baru SI Undiksha 2023",
-            "link": "https://si.undiksha.ac.id/penerimaan-2023",
-            "published": "2023-05-01",
-            "content": "Informasi penerimaan mahasiswa baru program studi Sistem Informasi tahun 2023."
-        },
-        {
-            "title": "Kuliah Umum: Transformasi Digital di Era Industri 4.0",
-            "link": "https://si.undiksha.ac.id/kuliah-umum-2023",
-            "published": "2023-04-15",
-            "content": "Program Studi SI mengadakan kuliah umum dengan tema Transformasi Digital."
-        },
-        {
-            "title": "Kerjasama Program Studi SI dengan Industri Lokal",
-            "link": "https://si.undiksha.ac.id/kerjasama-industri",
-            "published": "2023-03-20",
-            "content": "Program Studi Sistem Informasi menandatangani MoU dengan beberapa industri lokal."
-        }
-    ]
-    
-    # Return only the max number of posts requested
-    return dummy_posts[:max_posts]
