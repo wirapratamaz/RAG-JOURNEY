@@ -14,6 +14,7 @@ from sentence_transformers import SentenceTransformer
 from src.web_crawler import get_crawled_content
 import logging
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
+import random
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -75,6 +76,12 @@ IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
    - Format each stage as a complete paragraph, not a bullet point
    - Add a final concluding sentence about who is involved in the entire process
 
+3. For conversation endings (when user says thank you or similar):
+   - If the user says "terima kasih", "makasih", "thank you", or similar expressions of gratitude:
+     - Respond with a friendly closing like "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali."
+   - Never respond with just a short phrase like "Prosedur pendaftaran sidang skripsi dilakukan secara online."
+   - Always provide a complete, friendly closing that acknowledges the user's gratitude
+
 Context: {context}
 
 Question: {question}
@@ -119,6 +126,67 @@ def calculate_relevance_scores(chunk, query):
     
     # Return the similarity score as a list
     return similarity_score.flatten().tolist()
+
+def is_gratitude_expression(text):
+    """Detect if the text contains expressions of gratitude in Indonesian or English"""
+    # Convert to lowercase for case-insensitive matching
+    text_lower = text.lower()
+    
+    # Common gratitude expressions in Indonesian and English
+    gratitude_expressions = [
+        "terima kasih", "makasih", "thank you", "thanks", "thx", 
+        "terimakasih", "trims", "thank", "makasi", "mksh", "tq", 
+        "baik terimakasih", "baik terima kasih", "ok terimakasih",
+        "ok terima kasih", "okay terimakasih", "okay terima kasih"
+    ]
+    
+    # Check if any gratitude expression is in the text
+    return any(expr in text_lower for expr in gratitude_expressions)
+
+def get_gratitude_response():
+    """Generate a varied response to expressions of gratitude"""
+    responses = [
+        "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali.",
+        "Dengan senang hati! Semoga informasi yang saya berikan bermanfaat. Jangan ragu untuk bertanya lagi jika diperlukan.",
+        "Terima kasih kembali! Saya siap membantu jika Anda memiliki pertanyaan lainnya tentang Sistem Informasi Undiksha.",
+        "Sama-sama! Semoga sukses dengan studi Anda di Sistem Informasi Undiksha. Jika butuh bantuan lagi, silakan hubungi saya.",
+        "Senang bisa membantu Anda! Jika ada hal lain yang ingin ditanyakan, saya siap membantu kapan saja.",
+        "Tidak masalah! Semoga informasi yang saya berikan membantu. Silakan bertanya lagi jika ada yang kurang jelas."
+    ]
+    
+    return random.choice(responses)
+
+def is_procedure_question(text):
+    """Detect if the user is asking about a procedure or process"""
+    # Convert to lowercase for case-insensitive matching
+    text_lower = text.lower()
+    
+    # Keywords that indicate questions about procedures or processes
+    procedure_keywords = [
+        "bagaimana", "langkah", "tahap", "proses", "cara", "prosedur", 
+        "mekanisme", "alur", "how to", "how do", "steps", "procedure",
+        "apa yang harus", "what should", "what must", "apa saja yang",
+        "setelah", "after", "selanjutnya", "next", "kemudian", "then"
+    ]
+    
+    # Check if any procedure keyword is in the text
+    return any(keyword in text_lower for keyword in procedure_keywords)
+
+def is_asking_for_details(text):
+    """Detect if the user is asking for more details"""
+    # Convert to lowercase for case-insensitive matching
+    text_lower = text.lower()
+    
+    # Keywords that indicate requests for more details
+    detail_keywords = [
+        "jelaskan lebih", "detail", "rinci", "elaborate", "explain more",
+        "lebih lanjut", "further", "more information", "informasi lebih",
+        "bisa dijelaskan", "can you explain", "tolong jelaskan", "please explain",
+        "mohon jelaskan", "kindly explain", "tell me more", "ceritakan lebih"
+    ]
+    
+    # Check if any detail keyword is in the text
+    return any(keyword in text_lower for keyword in detail_keywords)
 
 def chunking_and_retrieval(user_input, show_process=True):
     if show_process:
@@ -165,6 +233,13 @@ def display_embedding_process(embedded_data):
 
 def generation(user_input, show_process=True):
     global rag_chain
+    
+    # Check if the user is expressing gratitude
+    if is_gratitude_expression(user_input):
+        return get_gratitude_response()
+    
+    # Flag to indicate if this is a request for more details
+    is_detail_request = is_asking_for_details(user_input)
     
     # Ensure rag_chain is initialized
     try:
@@ -214,6 +289,17 @@ def generation(user_input, show_process=True):
         
         if isinstance(response, dict) and "answer" in response:
             answer = response["answer"]
+            
+            # Check if this is a procedure question but the answer is too short
+            if is_procedure_question(user_input) and len(answer.split()) < 30 and not is_detail_request:
+                # If the answer is too short for a procedure question, ask for more details
+                logger.warning(f"Answer too short for procedure question: {answer}")
+                answer += "\n\nApakah Anda ingin saya menjelaskan lebih detail tentang prosedur ini? Silakan beri tahu saya bagian mana yang ingin Anda ketahui lebih lanjut."
+            
+            # If this is a request for more details, make sure the answer is comprehensive
+            if is_detail_request and len(answer.split()) < 100:
+                logger.warning(f"Answer too short for detail request: {answer}")
+                answer += "\n\nSaya harap penjelasan ini membantu. Jika Anda memerlukan informasi lebih spesifik, silakan tanyakan bagian tertentu yang ingin Anda ketahui lebih dalam."
         else:
             logger.warning(f"Unexpected response format: {response}")
             answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
