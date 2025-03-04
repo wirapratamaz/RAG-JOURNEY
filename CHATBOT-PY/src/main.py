@@ -64,7 +64,23 @@ def initialize_rag_chain():
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
             template="""Use the following pieces of context to answer the user's question concisely.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
+If you don't know the answer, don't try to make up an answer. Instead, respond politely and helpfully with:
+1. An acknowledgment that you don't have specific information about that topic
+2. An offer to help with other related topics that you might know about
+
+IMPORTANT INSTRUCTIONS ABOUT KNOWLEDGE SCOPE:
+- You ONLY have knowledge about Program Studi Sistem Informasi Undiksha.
+- If the user asks about ANY other university (besides Undiksha) or ANY other program (besides Sistem Informasi), explicitly state that you do not have information about other programs or universities.
+- NEVER provide specific information about programs other than Sistem Informasi or universities other than Undiksha.
+
+IMPORTANT INSTRUCTIONS ABOUT LANGUAGE:
+- ALWAYS respond in the SAME LANGUAGE that the user used in their question.
+- If the user asks in Bahasa Indonesia, respond in Bahasa Indonesia.
+- If the user asks in English, respond in English.
+- Do not mix languages in your response.
+- LANGUAGE MATCHING IS EXTREMELY IMPORTANT! Always check the language of the original question.
+- For Indonesian questions, respond with: "Mohon maaf, saya tidak memiliki informasi spesifik tentang..."
+- For English questions, respond with: "I'm sorry, I don't have specific information about..."
 
 IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
 1. For questions about processes or stages (like thesis completion), follow this format EXACTLY:
@@ -328,6 +344,53 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
     
     st.success("Analisis informasi selesai!")
 
+def format_dont_know_response(query):
+    """
+    Create a helpful and informative response when the system doesn't know the answer.
+    
+    Args:
+        query (str): The user's original query
+        
+    Returns:
+        str: A formatted response acknowledging lack of information
+    """
+    # Detect query type to give more specific recommendations
+    query_lower = query.lower()
+    
+    # Base response parts (in Indonesian by default)
+    greeting = "Mohon maaf, "
+    acknowledgment = "saya tidak memiliki informasi spesifik tentang "
+    
+    # Analyze query to determine topic
+    if "skripsi" in query_lower or "tugas akhir" in query_lower:
+        topic = "proses skripsi atau tugas akhir di program studi tersebut"
+        recommendations = [
+            "Anda dapat mengunjungi website resmi Program Studi untuk informasi lengkap tentang prosedur skripsi",
+            "Bagian akademik fakultas biasanya memiliki panduan lengkap tentang proses skripsi",
+            "Dosen pembimbing akademik Anda juga dapat memberikan pengarahan tentang prosedur skripsi"
+        ]
+        clarification = "Saya hanya dapat memberikan informasi tentang proses skripsi di Program Studi Sistem Informasi Undiksha."
+    else:
+        topic = "topik tersebut"
+        recommendations = [
+            "Silakan cek website resmi institusi terkait untuk informasi yang akurat",
+            "Bagian akademik atau administrasi kampus biasanya dapat membantu pertanyaan seperti ini",
+            "Anda mungkin dapat menemukan informasi di sistem informasi akademik universitas"
+        ]
+        clarification = "Saya hanya memiliki informasi tentang Program Studi Sistem Informasi Undiksha."
+    
+    # Build the response
+    response = f"{greeting}{acknowledgment}{topic}.\n\n"
+    response += f"{clarification}\n\n"
+    response += "Saran untuk mendapatkan informasi yang Anda cari:\n"
+    
+    for i, recommendation in enumerate(recommendations, 1):
+        response += f"{i}. {recommendation}\n"
+    
+    response += "\nApakah ada hal lain yang dapat saya bantu terkait Program Studi Sistem Informasi Undiksha?"
+    
+    return response
+
 def generation(user_input, show_process=True):
     global rag_chain
     
@@ -379,6 +442,26 @@ def generation(user_input, show_process=True):
         
         if isinstance(response, dict) and "answer" in response:
             answer = response["answer"]
+            
+            # Check if the response is a simple "I don't know" response
+            dont_know_phrases = [
+                "saya tidak tahu", 
+                "tidak mengetahui", 
+                "tidak memiliki informasi", 
+                "tidak dapat memberikan informasi",
+                "maaf, saya tidak",
+                "i don't know",
+                "i do not know",
+                "i don't have",
+                "i don't have specific information",
+                "i don't have information",
+                "i do not have information"
+            ]
+            
+            # If it's a simple "don't know" response, replace it with our formatted response
+            if any(phrase in answer.lower() for phrase in dont_know_phrases) and len(answer.split()) < 30:
+                answer = format_dont_know_response(user_input)
+                
         else:
             logger.warning(f"Unexpected response format: {response}")
             answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
@@ -389,7 +472,7 @@ def generation(user_input, show_process=True):
         if "name 'rag_chain' is not defined" in str(e):
             answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini."
         else:
-            answer = f"Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Detail: {str(e)}"
+            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Silakan coba kembali beberapa saat lagi atau coba pertanyaan lain. Jika masalah berlanjut, silakan hubungi administrator sistem."
     
     if show_process:
         st.success("Jawaban siap! 🚀")
