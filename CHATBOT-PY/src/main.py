@@ -163,12 +163,14 @@ def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filenam
             # Clean up excessive whitespace and newlines in the chunk
             cleaned_chunk = ' '.join(chunk.split())
             
+            # Generate the embedding for this chunk
             chunk_embedding = model.encode(chunk).tolist()
+            
             writer.writerow([
                 i,
                 cleaned_chunk,
                 json.dumps(chunk_embedding),
-                score
+                f"{score:.6f}"
             ])
     
     return filename
@@ -244,6 +246,30 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         
         # Add a separator
         st.markdown("---")
+        
+        # Display the retrieved chunks with full vector representations
+        st.subheader("Retrieved Chunks")
+        
+        # Create data for the chunks table with full vectors
+        chunks_data = []
+        for i, (chunk, score) in enumerate(embedded_data, 1):
+            # Generate vector for the chunk
+            chunk_embedding = model.encode(chunk).tolist()
+            chunks_data.append({
+                "No": i,
+                "Chunk": chunk,
+                "Vektor": str(chunk_embedding),
+                "Score": f"{score:.6f}"
+            })
+        
+        # Create DataFrame
+        chunks_df = pd.DataFrame(chunks_data)
+        
+        # Display the table
+        st.dataframe(chunks_df)
+        
+        # Add a separator
+        st.markdown("---")
     
     # Ensure this expander is not nested
     with st.expander("Detail Embedding", expanded=True):
@@ -255,7 +281,10 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
             num_chunks = st.slider("Show top N chunks:", 1, len(embedded_data), default_num_chunks)
         
         with col2:
-            st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
+            # Display information about the number of chunks
+            if num_chunks < len(embedded_data):
+                # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
+                st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
             
         # Filter data based on user selection
         filtered_data = embedded_data[:num_chunks] if num_chunks < len(embedded_data) else embedded_data
