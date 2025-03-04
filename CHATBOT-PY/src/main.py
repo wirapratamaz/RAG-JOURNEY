@@ -14,6 +14,10 @@ from sentence_transformers import SentenceTransformer
 from src.web_crawler import get_crawled_content
 import logging
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
+import numpy as np
+import csv
+import datetime
+import json
 import random
 
 # Configure logging
@@ -61,7 +65,23 @@ def initialize_rag_chain():
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
             template="""Use the following pieces of context to answer the user's question concisely.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
+If you don't know the answer, don't try to make up an answer. Instead, respond politely and helpfully with:
+1. An acknowledgment that you don't have specific information about that topic
+2. An offer to help with other related topics that you might know about
+
+IMPORTANT INSTRUCTIONS ABOUT KNOWLEDGE SCOPE:
+- You ONLY have knowledge about Program Studi Sistem Informasi Undiksha.
+- If the user asks about ANY other university (besides Undiksha) or ANY other program (besides Sistem Informasi), explicitly state that you do not have information about other programs or universities.
+- NEVER provide specific information about programs other than Sistem Informasi or universities other than Undiksha.
+
+IMPORTANT INSTRUCTIONS ABOUT LANGUAGE:
+- ALWAYS respond in the SAME LANGUAGE that the user used in their question.
+- If the user asks in Bahasa Indonesia, respond in Bahasa Indonesia.
+- If the user asks in English, respond in English.
+- Do not mix languages in your response.
+- LANGUAGE MATCHING IS EXTREMELY IMPORTANT! Always check the language of the original question.
+- For Indonesian questions, respond with: "Mohon maaf, saya tidak memiliki informasi spesifik tentang..."
+- For English questions, respond with: "I'm sorry, I don't have specific information about..."
 
 IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
 1. For questions about processes or stages (like thesis completion), follow this format EXACTLY:
@@ -118,14 +138,65 @@ Answer:""",
 
 def calculate_relevance_scores(chunk, query):
     # Generate embeddings for the chunk and the query
-    chunk_embedding = model.encode([chunk])
-    query_embedding = model.encode([query])
+    chunk_embedding = model.encode(chunk)
+    query_embedding = model.encode(query)
     
     # Calculate cosine similarity
-    similarity_score = cosine_similarity(chunk_embedding, query_embedding)
+    similarity = cosine_similarity([chunk_embedding], [query_embedding])[0][0]
+    return similarity
+
+def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filename=None):
+    """
+    Export retrieval data to CSV file
     
-    # Return the similarity score as a list
-    return similarity_score.flatten().tolist()
+    Args:
+        user_query (str): The user's query
+        query_embedding (list): The embedding vector of the user's query
+        retrieved_data (list): List of tuples (chunk, score)
+        filename (str, optional): Custom filename for the CSV. Defaults to None.
+    
+    Returns:
+        str: Path to the saved CSV file
+    """
+    if filename is None:
+        # Create a timestamped filename
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"output/retrieval_data_{timestamp}.csv"
+    
+    # Ensure output directory exists
+    os.makedirs("output", exist_ok=True)
+    
+    # Create CSV file
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write header section - Question and its embedding
+        writer.writerow(["Question"])
+        writer.writerow([user_query])
+        writer.writerow(["Question Embedding (Vector)"])
+        writer.writerow([json.dumps(query_embedding.tolist())])
+        writer.writerow([])  # Empty row as separator
+        
+        # Write retrieved chunks section
+        writer.writerow(["Retrieved Chunks"])
+        writer.writerow(["No", "Chunk", "Vector", "Score"])
+        
+        # Write each chunk with its data
+        for i, (chunk, score) in enumerate(retrieved_data, 1):
+            # Clean up excessive whitespace and newlines in the chunk
+            cleaned_chunk = ' '.join(chunk.split())
+            
+            # Generate the embedding for this chunk
+            chunk_embedding = model.encode(chunk).tolist()
+            
+            writer.writerow([
+                i,
+                cleaned_chunk,
+                json.dumps(chunk_embedding),
+                f"{score:.6f}"
+            ])
+    
+    return filename
 
 def is_gratitude_expression(text):
     """Detect if the text contains expressions of gratitude in Indonesian or English"""
@@ -188,7 +259,7 @@ def is_asking_for_details(text):
     # Check if any detail keyword is in the text
     return any(keyword in text_lower for keyword in detail_keywords)
 
-def chunking_and_retrieval(user_input, show_process=True):
+def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     if show_process:
         st.subheader("1. Chunking and Retrieval")
     
@@ -196,40 +267,197 @@ def chunking_and_retrieval(user_input, show_process=True):
         retrieved_docs = retriever.get_relevant_documents(user_input)
         embedded_data = []
         
+        # Generate query embedding for later use
+        query_embedding = model.encode(user_input)
+        
         for doc in retrieved_docs:
             chunk = doc.page_content
-            relevance_scores = calculate_relevance_scores(chunk, user_input)
-            embedded_data.append((chunk, relevance_scores))
+            relevance_score = calculate_relevance_scores(chunk, user_input)
+            embedded_data.append((chunk, relevance_score))
         
-        if show_process:
-            display_embedding_process(embedded_data)
+        # Sort by relevance score in descending order
+        embedded_data.sort(key=lambda x: x[1], reverse=True)
+        
+        if show_process and st.session_state.processing_new_question:
+            # Display the embedding process only when processing a new question
+            display_embedding_process(embedded_data, user_input, query_embedding)
             
-        return embedded_data
+            # Export to CSV if requested
+            if export_to_csv:
+                csv_path = export_retrieval_to_csv(user_input, query_embedding, embedded_data)
+                st.success(f"Retrieval data exported to CSV: {csv_path}")
+                
+                # Provide download button for the CSV
+                with open(csv_path, 'r', encoding='utf-8') as file:
+                    csv_content = file.read()
+                st.download_button(
+                    label="Download CSV",
+                    data=csv_content,
+                    file_name=os.path.basename(csv_path),
+                    mime="text/csv"
+                )
+                return embedded_data, query_embedding, csv_path
+            
+        return embedded_data, query_embedding
     except Exception as e:
         if show_process:
             st.warning(f"An error occurred during retrieval: {e}")
-        return []
+        return [], None
 
-def display_embedding_process(embedded_data):
+def display_embedding_process(embedded_data, query=None, query_embedding=None):
     st.subheader("Embedding Process")
+    
+    # Display original question and its embedding if available
+    if query is not None and query_embedding is not None:
+        st.subheader("Question Embedding")
+        
+        # Show the original question
+        st.markdown("**Pertanyaan Asli**")
+        st.text(query)
+        
+        # Show the full question embedding without truncation
+        st.markdown("**Embedding Pertanyaan**")
+        full_embedding = str(query_embedding.tolist())
+        st.text_area("Full embedding vector:", full_embedding, height=200)
+        
+        # Add a button to download the full embedding
+        st.download_button(
+            label="Download Question Embedding",
+            data=full_embedding,
+            file_name="question_embedding.txt",
+            mime="text/plain"
+        )
+        
+        # Add a separator
+        st.markdown("---")
+        
+        # Display the retrieved chunks with full vector representations
+        st.subheader("Retrieved Chunks")
+        
+        # Create data for the chunks table with full vectors
+        chunks_data = []
+        for i, (chunk, score) in enumerate(embedded_data, 1):
+            # Generate vector for the chunk
+            chunk_embedding = model.encode(chunk).tolist()
+            chunks_data.append({
+                "No": i,
+                "Chunk": chunk,
+                "Vektor": str(chunk_embedding),
+                "Score": f"{score:.6f}"
+            })
+        
+        # Create DataFrame
+        chunks_df = pd.DataFrame(chunks_data)
+        
+        # Display the table
+        st.dataframe(chunks_df)
+        
+        # Add a separator
+        st.markdown("---")
+    
     # Ensure this expander is not nested
     with st.expander("Detail Embedding", expanded=True):
+        # Add a filter for top chunks
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            # Default to showing top 5 chunks if there are more than 5
+            default_num_chunks = min(5, len(embedded_data))
+            num_chunks = st.slider("Show top N chunks:", 1, len(embedded_data), default_num_chunks)
+        
+        with col2:
+            # Display information about the number of chunks
+            if num_chunks < len(embedded_data):
+                # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
+                st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
+            
+        # Filter data based on user selection
+        filtered_data = embedded_data[:num_chunks] if num_chunks < len(embedded_data) else embedded_data
+        
         # Prepare data for display
         data = {
-            "No": range(1, len(embedded_data) + 1),
-            "Konten": [chunk for chunk, _ in embedded_data],
-            "Relevansi (3 nilai teratas)": [scores[:3] for _, scores in embedded_data]
+            "No": range(1, len(filtered_data) + 1),
+            "Chunk": [chunk for chunk, _ in filtered_data],
+            "Score": [score for _, score in filtered_data]
         }
         
         df = pd.DataFrame(data)
         st.dataframe(df)
         
-        # Add a section to display the full raw text of all chunks for better debugging
-        st.subheader("Full Retrieved Content")
-        full_content = "\n\n---\n\n".join([chunk for chunk, _ in embedded_data])
-        st.text_area("All retrieved chunks (raw text):", full_content, height=300)
+        # Add a section to display the full raw text of filtered chunks
+        st.subheader("Top Retrieved Content")
+        
+        # Format the chunks properly as paragraphs
+        formatted_chunks = []
+        for chunk, _ in filtered_data:
+            # Clean up excessive whitespace and newlines
+            cleaned_chunk = ' '.join(chunk.split())
+            formatted_chunks.append(cleaned_chunk)
+        
+        # Join the formatted chunks with proper paragraph breaks
+        full_content = "\n\n".join(formatted_chunks)
+        
+        # Display the formatted content
+        st.text_area("Top filtered chunks:", full_content, height=200)
+        
+        # Always show all chunks
+        if len(embedded_data) > num_chunks:
+            st.subheader("All Retrieved Chunks")
+            all_formatted_chunks = []
+            for i, (chunk, score) in enumerate(embedded_data, 1):
+                cleaned_chunk = ' '.join(chunk.split())
+                all_formatted_chunks.append(f"Chunk {i} [Score: {score:.4f}] {cleaned_chunk}")
+            
+            all_content = "\n\n".join(all_formatted_chunks)
+            st.text_area("All chunks with scores:", all_content, height=400)
     
     st.success("Analisis informasi selesai!")
+
+def format_dont_know_response(query):
+    """
+    Create a helpful and informative response when the system doesn't know the answer.
+    
+    Args:
+        query (str): The user's original query
+        
+    Returns:
+        str: A formatted response acknowledging lack of information
+    """
+    # Detect query type to give more specific recommendations
+    query_lower = query.lower()
+    
+    # Base response parts (in Indonesian by default)
+    greeting = "Mohon maaf, "
+    acknowledgment = "saya tidak memiliki informasi spesifik tentang "
+    
+    # Analyze query to determine topic
+    if "skripsi" in query_lower or "tugas akhir" in query_lower:
+        topic = "proses skripsi atau tugas akhir di program studi tersebut"
+        recommendations = [
+            "Anda dapat mengunjungi website resmi Program Studi untuk informasi lengkap tentang prosedur skripsi",
+            "Bagian akademik fakultas biasanya memiliki panduan lengkap tentang proses skripsi",
+            "Dosen pembimbing akademik Anda juga dapat memberikan pengarahan tentang prosedur skripsi"
+        ]
+        clarification = "Saya hanya dapat memberikan informasi tentang proses skripsi di Program Studi Sistem Informasi Undiksha."
+    else:
+        topic = "topik tersebut"
+        recommendations = [
+            "Silakan cek website resmi institusi terkait untuk informasi yang akurat",
+            "Bagian akademik atau administrasi kampus biasanya dapat membantu pertanyaan seperti ini",
+            "Anda mungkin dapat menemukan informasi di sistem informasi akademik universitas"
+        ]
+        clarification = "Saya hanya memiliki informasi tentang Program Studi Sistem Informasi Undiksha."
+    
+    # Build the response
+    response = f"{greeting}{acknowledgment}{topic}.\n\n"
+    response += f"{clarification}\n\n"
+    response += "Saran untuk mendapatkan informasi yang Anda cari:\n"
+    
+    for i, recommendation in enumerate(recommendations, 1):
+        response += f"{i}. {recommendation}\n"
+    
+    response += "\nApakah ada hal lain yang dapat saya bantu terkait Program Studi Sistem Informasi Undiksha?"
+    
+    return response
 
 def generation(user_input, show_process=True):
     global rag_chain
@@ -290,6 +518,25 @@ def generation(user_input, show_process=True):
         if isinstance(response, dict) and "answer" in response:
             answer = response["answer"]
             
+            # Check if the response is a simple "I don't know" response
+            dont_know_phrases = [
+                "saya tidak tahu", 
+                "tidak mengetahui", 
+                "tidak memiliki informasi", 
+                "tidak dapat memberikan informasi",
+                "maaf, saya tidak",
+                "i don't know",
+                "i do not know",
+                "i don't have",
+                "i don't have specific information",
+                "i don't have information",
+                "i do not have information"
+            ]
+            
+            # If it's a simple "don't know" response, replace it with our formatted response
+            if any(phrase in answer.lower() for phrase in dont_know_phrases) and len(answer.split()) < 30:
+                answer = format_dont_know_response(user_input)
+                
             # Check if this is a procedure question but the answer is too short
             if is_procedure_question(user_input) and len(answer.split()) < 30 and not is_detail_request:
                 # If the answer is too short for a procedure question, ask for more details
@@ -310,7 +557,7 @@ def generation(user_input, show_process=True):
         if "name 'rag_chain' is not defined" in str(e):
             answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini."
         else:
-            answer = f"Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Detail: {str(e)}"
+            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Silakan coba kembali beberapa saat lagi atau coba pertanyaan lain. Jika masalah berlanjut, silakan hubungi administrator sistem."
     
     if show_process:
         st.success("Jawaban siap! 🚀")
@@ -328,11 +575,39 @@ def main():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
+    # Initialize other session state variables for developer mode
+    if "dev_mode_embedded_data" not in st.session_state:
+        st.session_state.dev_mode_embedded_data = None
+    
+    if "dev_mode_query_embedding" not in st.session_state:
+        st.session_state.dev_mode_query_embedding = None
+    
+    if "dev_mode_csv_path" not in st.session_state:
+        st.session_state.dev_mode_csv_path = None
+        
+    # Store the original query
+    if "dev_mode_query" not in st.session_state:
+        st.session_state.dev_mode_query = None
+        
+    # Store the latest answer
+    if "dev_mode_latest_answer" not in st.session_state:
+        st.session_state.dev_mode_latest_answer = None
+        
+    # Flag to track if we're processing a new question
+    if "processing_new_question" not in st.session_state:
+        st.session_state.processing_new_question = False
+    
     # Sidebar
     with st.sidebar:
         st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=150)
         st.title("Virtual Assistant SI Undiksha")
         mode = st.selectbox("Mode", ["User Mode", "Developer Mode"])
+        
+        # Add CSV export option in developer mode
+        export_to_csv = False
+        if mode == "Developer Mode":
+            export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
+        
         st.text("Universitas Pendidikan Ganesha")
         st.markdown("---")
         with st.expander("Lihat Info Terkini"):
@@ -348,12 +623,57 @@ def main():
         st.header("Selamat Datang di Virtual Assistant SI Undiksha! 🤖💻")
         st.info("Halo, Saya adalah asisten virtual khusus untuk mahasiswa Sistem Informasi Undiksha. Tanyakan apa saja seputar program studi, kurikulum, atau informasi yang berkaitan!")
 
-    # Chat container
-    chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.chat_history:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+    show_process = mode == "Developer Mode"
+    
+    # In developer mode, we'll display differently to ensure answers appear at the bottom
+    if show_process:
+        # Create a container for displaying the conversation
+        chat_container = st.container()
+        
+        # In developer mode, only display the questions in the main chat area
+        with chat_container:
+            # Show questions-only view
+            for i, message in enumerate(st.session_state.chat_history):
+                if message["role"] == "user":
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
+                        
+        # Display the embedding process info (if available)
+        if st.session_state.dev_mode_embedded_data is not None and not st.session_state.processing_new_question:
+            display_embedding_process(
+                st.session_state.dev_mode_embedded_data,
+                st.session_state.dev_mode_query,
+                st.session_state.dev_mode_query_embedding
+            )
+            
+            # If we exported to CSV, show download button
+            if st.session_state.dev_mode_csv_path is not None:
+                st.success(f"Retrieval data exported to CSV: {st.session_state.dev_mode_csv_path}")
+                
+                # Provide download button for the CSV
+                try:
+                    with open(st.session_state.dev_mode_csv_path, 'r', encoding='utf-8') as file:
+                        csv_content = file.read()
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_content,
+                        file_name=os.path.basename(st.session_state.dev_mode_csv_path),
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.warning(f"Could not load CSV file: {e}")
+                    
+        # Display the latest answer at the very bottom (after all processing)
+        if st.session_state.dev_mode_latest_answer is not None and not st.session_state.processing_new_question:
+            with st.chat_message("assistant"):
+                st.markdown(st.session_state.dev_mode_latest_answer)
+    else:
+        # In user mode, display the full chat history normally
+        chat_container = st.container()
+        with chat_container:
+            for message in st.session_state.chat_history:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
     # Chat input
     user_input = st.chat_input("Ada yang ingin Anda tanyakan tentang Sistem Informasi Undiksha?")
@@ -362,19 +682,41 @@ def main():
         # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         
-        # Determine if we should show processing details based on mode
-        show_process = mode == "Developer Mode"
+        # Set flag that we're processing a new question
+        st.session_state.processing_new_question = True
         
         # Process the query
         if show_process:
+            result = chunking_and_retrieval(user_input, show_process, export_to_csv)
+            
+            # Handle different return types
+            if export_to_csv and len(result) == 3:
+                embedded_data, query_embedding, csv_path = result
+                st.session_state.dev_mode_csv_path = csv_path
+            else:
+                embedded_data, query_embedding = result
+            
+            # Store in session state for persistence
+            st.session_state.dev_mode_embedded_data = embedded_data
+            st.session_state.dev_mode_query_embedding = query_embedding
+            st.session_state.dev_mode_query = user_input
+        else:
+            # In user mode, we don't need to store the results
             chunking_and_retrieval(user_input, show_process)
         
+        # Generate response
         answer = generation(user_input, show_process)
+        
+        # Store the latest answer
+        st.session_state.dev_mode_latest_answer = answer
         
         # Add assistant response to chat history
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         
-        # Use st.rerun() instead of st.experimental_rerun()
+        # Clear the processing flag since we're done
+        st.session_state.processing_new_question = False
+        
+        # Rerun to update the UI
         st.rerun()
 
 if __name__ == "__main__":
