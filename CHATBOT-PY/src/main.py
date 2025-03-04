@@ -14,6 +14,10 @@ from sentence_transformers import SentenceTransformer
 from src.web_crawler import get_crawled_content
 import logging
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
+import numpy as np
+import csv
+import datetime
+import json
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -111,16 +115,65 @@ Answer:""",
 
 def calculate_relevance_scores(chunk, query):
     # Generate embeddings for the chunk and the query
-    chunk_embedding = model.encode([chunk])
-    query_embedding = model.encode([query])
+    chunk_embedding = model.encode(chunk)
+    query_embedding = model.encode(query)
     
     # Calculate cosine similarity
-    similarity_score = cosine_similarity(chunk_embedding, query_embedding)
-    
-    # Return the similarity score as a list
-    return similarity_score.flatten().tolist()
+    similarity = cosine_similarity([chunk_embedding], [query_embedding])[0][0]
+    return similarity
 
-def chunking_and_retrieval(user_input, show_process=True):
+def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filename=None):
+    """
+    Export retrieval data to CSV file
+    
+    Args:
+        user_query (str): The user's query
+        query_embedding (list): The embedding vector of the user's query
+        retrieved_data (list): List of tuples (chunk, score)
+        filename (str, optional): Custom filename for the CSV. Defaults to None.
+    
+    Returns:
+        str: Path to the saved CSV file
+    """
+    if filename is None:
+        # Create a timestamped filename
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"output/retrieval_data_{timestamp}.csv"
+    
+    # Ensure output directory exists
+    os.makedirs("output", exist_ok=True)
+    
+    # Create CSV file
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        
+        # Write header section - Question and its embedding
+        writer.writerow(["Question"])
+        writer.writerow([user_query])
+        writer.writerow(["Question Embedding (Vector)"])
+        writer.writerow([json.dumps(query_embedding.tolist())])
+        writer.writerow([])  # Empty row as separator
+        
+        # Write retrieved chunks section
+        writer.writerow(["Retrieved Chunks"])
+        writer.writerow(["No", "Chunk", "Vector", "Score"])
+        
+        # Write each chunk with its data
+        for i, (chunk, score) in enumerate(retrieved_data, 1):
+            # Clean up excessive whitespace and newlines in the chunk
+            cleaned_chunk = ' '.join(chunk.split())
+            
+            chunk_embedding = model.encode(chunk).tolist()
+            writer.writerow([
+                i,
+                cleaned_chunk,
+                json.dumps(chunk_embedding),
+                score
+            ])
+    
+    return filename
+
+def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     if show_process:
         st.subheader("1. Chunking and Retrieval")
     
@@ -128,38 +181,121 @@ def chunking_and_retrieval(user_input, show_process=True):
         retrieved_docs = retriever.get_relevant_documents(user_input)
         embedded_data = []
         
+        # Generate query embedding for later use
+        query_embedding = model.encode(user_input)
+        
         for doc in retrieved_docs:
             chunk = doc.page_content
-            relevance_scores = calculate_relevance_scores(chunk, user_input)
-            embedded_data.append((chunk, relevance_scores))
+            relevance_score = calculate_relevance_scores(chunk, user_input)
+            embedded_data.append((chunk, relevance_score))
         
-        if show_process:
-            display_embedding_process(embedded_data)
+        # Sort by relevance score in descending order
+        embedded_data.sort(key=lambda x: x[1], reverse=True)
+        
+        if show_process and st.session_state.processing_new_question:
+            # Display the embedding process only when processing a new question
+            display_embedding_process(embedded_data, user_input, query_embedding)
             
-        return embedded_data
+            # Export to CSV if requested
+            if export_to_csv:
+                csv_path = export_retrieval_to_csv(user_input, query_embedding, embedded_data)
+                st.success(f"Retrieval data exported to CSV: {csv_path}")
+                
+                # Provide download button for the CSV
+                with open(csv_path, 'r', encoding='utf-8') as file:
+                    csv_content = file.read()
+                st.download_button(
+                    label="Download CSV",
+                    data=csv_content,
+                    file_name=os.path.basename(csv_path),
+                    mime="text/csv"
+                )
+                return embedded_data, query_embedding, csv_path
+            
+        return embedded_data, query_embedding
     except Exception as e:
         if show_process:
             st.warning(f"An error occurred during retrieval: {e}")
-        return []
+        return [], None
 
-def display_embedding_process(embedded_data):
+def display_embedding_process(embedded_data, query=None, query_embedding=None):
     st.subheader("Embedding Process")
+    
+    # Display original question and its embedding if available
+    if query is not None and query_embedding is not None:
+        st.subheader("Question Embedding")
+        
+        # Show the original question
+        st.markdown("**Pertanyaan Asli**")
+        st.text(query)
+        
+        # Show the full question embedding without truncation
+        st.markdown("**Embedding Pertanyaan**")
+        full_embedding = str(query_embedding.tolist())
+        st.text_area("Full embedding vector:", full_embedding, height=200)
+        
+        # Add a button to download the full embedding
+        st.download_button(
+            label="Download Question Embedding",
+            data=full_embedding,
+            file_name="question_embedding.txt",
+            mime="text/plain"
+        )
+        
+        # Add a separator
+        st.markdown("---")
+    
     # Ensure this expander is not nested
     with st.expander("Detail Embedding", expanded=True):
+        # Add a filter for top chunks
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            # Default to showing top 5 chunks if there are more than 5
+            default_num_chunks = min(5, len(embedded_data))
+            num_chunks = st.slider("Show top N chunks:", 1, len(embedded_data), default_num_chunks)
+        
+        with col2:
+            st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
+            
+        # Filter data based on user selection
+        filtered_data = embedded_data[:num_chunks] if num_chunks < len(embedded_data) else embedded_data
+        
         # Prepare data for display
         data = {
-            "No": range(1, len(embedded_data) + 1),
-            "Konten": [chunk for chunk, _ in embedded_data],
-            "Relevansi (3 nilai teratas)": [scores[:3] for _, scores in embedded_data]
+            "No": range(1, len(filtered_data) + 1),
+            "Chunk": [chunk for chunk, _ in filtered_data],
+            "Score": [score for _, score in filtered_data]
         }
         
         df = pd.DataFrame(data)
         st.dataframe(df)
         
-        # Add a section to display the full raw text of all chunks for better debugging
-        st.subheader("Full Retrieved Content")
-        full_content = "\n\n---\n\n".join([chunk for chunk, _ in embedded_data])
-        st.text_area("All retrieved chunks (raw text):", full_content, height=300)
+        # Add a section to display the full raw text of filtered chunks
+        st.subheader("Top Retrieved Content")
+        
+        # Format the chunks properly as paragraphs
+        formatted_chunks = []
+        for chunk, _ in filtered_data:
+            # Clean up excessive whitespace and newlines
+            cleaned_chunk = ' '.join(chunk.split())
+            formatted_chunks.append(cleaned_chunk)
+        
+        # Join the formatted chunks with proper paragraph breaks
+        full_content = "\n\n".join(formatted_chunks)
+        
+        # Display the formatted content
+        st.text_area("Top filtered chunks:", full_content, height=200)
+        
+        # Always show all chunks
+        if len(embedded_data) > num_chunks:
+            st.subheader("All Retrieved Chunks")
+            all_formatted_chunks = []
+            for i, (chunk, score) in enumerate(embedded_data, 1):
+                cleaned_chunk = ' '.join(chunk.split())
+                all_formatted_chunks.append(f"Chunk {i} [Score: {score:.4f}] {cleaned_chunk}")
+            
+            all_content = "\n\n".join(all_formatted_chunks)
+            st.text_area("All chunks with scores:", all_content, height=400)
     
     st.success("Analisis informasi selesai!")
 
@@ -242,11 +378,39 @@ def main():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
+    # Initialize other session state variables for developer mode
+    if "dev_mode_embedded_data" not in st.session_state:
+        st.session_state.dev_mode_embedded_data = None
+    
+    if "dev_mode_query_embedding" not in st.session_state:
+        st.session_state.dev_mode_query_embedding = None
+    
+    if "dev_mode_csv_path" not in st.session_state:
+        st.session_state.dev_mode_csv_path = None
+        
+    # Store the original query
+    if "dev_mode_query" not in st.session_state:
+        st.session_state.dev_mode_query = None
+        
+    # Store the latest answer
+    if "dev_mode_latest_answer" not in st.session_state:
+        st.session_state.dev_mode_latest_answer = None
+        
+    # Flag to track if we're processing a new question
+    if "processing_new_question" not in st.session_state:
+        st.session_state.processing_new_question = False
+    
     # Sidebar
     with st.sidebar:
         st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=150)
         st.title("Virtual Assistant SI Undiksha")
         mode = st.selectbox("Mode", ["User Mode", "Developer Mode"])
+        
+        # Add CSV export option in developer mode
+        export_to_csv = False
+        if mode == "Developer Mode":
+            export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
+        
         st.text("Universitas Pendidikan Ganesha")
         st.markdown("---")
         with st.expander("Lihat Info Terkini"):
@@ -262,12 +426,57 @@ def main():
         st.header("Selamat Datang di Virtual Assistant SI Undiksha! 🤖💻")
         st.info("Halo, Saya adalah asisten virtual khusus untuk mahasiswa Sistem Informasi Undiksha. Tanyakan apa saja seputar program studi, kurikulum, atau informasi yang berkaitan!")
 
-    # Chat container
-    chat_container = st.container()
-    with chat_container:
-        for message in st.session_state.chat_history:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+    show_process = mode == "Developer Mode"
+    
+    # In developer mode, we'll display differently to ensure answers appear at the bottom
+    if show_process:
+        # Create a container for displaying the conversation
+        chat_container = st.container()
+        
+        # In developer mode, only display the questions in the main chat area
+        with chat_container:
+            # Show questions-only view
+            for i, message in enumerate(st.session_state.chat_history):
+                if message["role"] == "user":
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
+                        
+        # Display the embedding process info (if available)
+        if st.session_state.dev_mode_embedded_data is not None and not st.session_state.processing_new_question:
+            display_embedding_process(
+                st.session_state.dev_mode_embedded_data,
+                st.session_state.dev_mode_query,
+                st.session_state.dev_mode_query_embedding
+            )
+            
+            # If we exported to CSV, show download button
+            if st.session_state.dev_mode_csv_path is not None:
+                st.success(f"Retrieval data exported to CSV: {st.session_state.dev_mode_csv_path}")
+                
+                # Provide download button for the CSV
+                try:
+                    with open(st.session_state.dev_mode_csv_path, 'r', encoding='utf-8') as file:
+                        csv_content = file.read()
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_content,
+                        file_name=os.path.basename(st.session_state.dev_mode_csv_path),
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.warning(f"Could not load CSV file: {e}")
+                    
+        # Display the latest answer at the very bottom (after all processing)
+        if st.session_state.dev_mode_latest_answer is not None and not st.session_state.processing_new_question:
+            with st.chat_message("assistant"):
+                st.markdown(st.session_state.dev_mode_latest_answer)
+    else:
+        # In user mode, display the full chat history normally
+        chat_container = st.container()
+        with chat_container:
+            for message in st.session_state.chat_history:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
     # Chat input
     user_input = st.chat_input("Ada yang ingin Anda tanyakan tentang Sistem Informasi Undiksha?")
@@ -276,19 +485,41 @@ def main():
         # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         
-        # Determine if we should show processing details based on mode
-        show_process = mode == "Developer Mode"
+        # Set flag that we're processing a new question
+        st.session_state.processing_new_question = True
         
         # Process the query
         if show_process:
+            result = chunking_and_retrieval(user_input, show_process, export_to_csv)
+            
+            # Handle different return types
+            if export_to_csv and len(result) == 3:
+                embedded_data, query_embedding, csv_path = result
+                st.session_state.dev_mode_csv_path = csv_path
+            else:
+                embedded_data, query_embedding = result
+            
+            # Store in session state for persistence
+            st.session_state.dev_mode_embedded_data = embedded_data
+            st.session_state.dev_mode_query_embedding = query_embedding
+            st.session_state.dev_mode_query = user_input
+        else:
+            # In user mode, we don't need to store the results
             chunking_and_retrieval(user_input, show_process)
         
+        # Generate response
         answer = generation(user_input, show_process)
+        
+        # Store the latest answer
+        st.session_state.dev_mode_latest_answer = answer
         
         # Add assistant response to chat history
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
         
-        # Use st.rerun() instead of st.experimental_rerun()
+        # Clear the processing flag since we're done
+        st.session_state.processing_new_question = False
+        
+        # Rerun to update the UI
         st.rerun()
 
 if __name__ == "__main__":
