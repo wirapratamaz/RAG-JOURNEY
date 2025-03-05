@@ -1,5 +1,6 @@
 import os
 import ssl
+import sys
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -19,6 +20,20 @@ import csv
 import datetime
 import json
 import random
+
+# Patch to prevent torch._classes.__path__._path error in Streamlit's file watcher
+import importlib.abc
+import importlib.machinery
+
+class TorchImportFixer(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        # Intercept attempts to access torch._classes.__path__._path
+        if fullname == 'torch._classes.__path__._path':
+            return None
+        return None
+
+# Add the import hook to sys.meta_path
+sys.meta_path.insert(0, TorchImportFixer())
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -64,7 +79,7 @@ def initialize_rag_chain():
         
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
-            template="""Use the following pieces of context to answer the user's question concisely.
+            template="""Use the following pieces of context to answer the user's question comprehensively and accurately.
 If you don't know the answer, don't try to make up an answer. Instead, respond politely and helpfully with:
 1. An acknowledgment that you don't have specific information about that topic
 2. An offer to help with other related topics that you might know about
@@ -101,6 +116,16 @@ IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
      - Respond with a friendly closing like "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali."
    - Never respond with just a short phrase like "Prosedur pendaftaran sidang skripsi dilakukan secara online."
    - Always provide a complete, friendly closing that acknowledges the user's gratitude
+
+4. For general information questions (like "apa itu prodi sistem informasi undiksha"):
+   - Provide a comprehensive answer with at least 3-4 paragraphs of information
+   - Include information about the program's curriculum, focus areas, and key features
+   - Mention any specializations or concentrations available
+   - End with a sentence offering to provide more specific information if needed
+
+5. NEVER include disclaimers like "I don't have information" when you actually DO have the information in the context.
+   - Only use disclaimers when the question is truly outside your knowledge scope
+   - If you have partial information, provide what you know and then offer to help with related topics
 
 Context: {context}
 
@@ -199,33 +224,68 @@ def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filenam
     return filename
 
 def is_gratitude_expression(text):
-    """Detect if the text contains expressions of gratitude in Indonesian or English"""
-    # Convert to lowercase for case-insensitive matching
+    """
+    Check if the text is an expression of gratitude.
+    
+    Args:
+        text (str): The text to check
+        
+    Returns:
+        bool: True if the text is an expression of gratitude, False otherwise
+    """
     text_lower = text.lower()
     
     # Common gratitude expressions in Indonesian and English
     gratitude_expressions = [
         "terima kasih", "makasih", "thank you", "thanks", "thx", 
-        "terimakasih", "trims", "thank", "makasi", "mksh", "tq", 
-        "baik terimakasih", "baik terima kasih", "ok terimakasih",
-        "ok terima kasih", "okay terimakasih", "okay terima kasih"
+        "thank", "makasi", "terimakasih", "trims", "trimakasih",
+        "thank u", "tq", "ty", "terimakasi", "terima kasi"
     ]
     
     # Check if any gratitude expression is in the text
-    return any(expr in text_lower for expr in gratitude_expressions)
+    return any(expression in text_lower for expression in gratitude_expressions)
 
 def get_gratitude_response():
-    """Generate a varied response to expressions of gratitude"""
-    responses = [
+    """
+    Generate a random gratitude response.
+    
+    Returns:
+        str: A random gratitude response
+    """
+    # Get the language from the last user message
+    if 'chat_history' in st.session_state and st.session_state.chat_history:
+        for msg in reversed(st.session_state.chat_history):
+            if msg["role"] == "user":
+                language = detect_language(msg["content"])
+                break
+    else:
+        language = "id"  # Default to Indonesian
+    
+    is_english = (language == 'en')
+    
+    # Gratitude responses in Indonesian
+    indonesian_responses = [
         "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali.",
-        "Dengan senang hati! Semoga informasi yang saya berikan bermanfaat. Jangan ragu untuk bertanya lagi jika diperlukan.",
-        "Terima kasih kembali! Saya siap membantu jika Anda memiliki pertanyaan lainnya tentang Sistem Informasi Undiksha.",
-        "Sama-sama! Semoga sukses dengan studi Anda di Sistem Informasi Undiksha. Jika butuh bantuan lagi, silakan hubungi saya.",
-        "Senang bisa membantu Anda! Jika ada hal lain yang ingin ditanyakan, saya siap membantu kapan saja.",
-        "Tidak masalah! Semoga informasi yang saya berikan membantu. Silakan bertanya lagi jika ada yang kurang jelas."
+        "Dengan senang hati! Jika Anda memiliki pertanyaan lain tentang Program Studi Sistem Informasi Undiksha, saya siap membantu.",
+        "Tidak masalah! Saya senang dapat memberikan informasi yang Anda butuhkan. Jangan ragu untuk bertanya lagi.",
+        "Sama-sama! Semoga informasi yang saya berikan bermanfaat. Jika ada hal lain yang ingin Anda ketahui, silakan tanyakan.",
+        "Terima kasih kembali! Saya di sini untuk membantu Anda dengan informasi tentang Program Studi Sistem Informasi Undiksha."
     ]
     
-    return random.choice(responses)
+    # Gratitude responses in English
+    english_responses = [
+        "You're welcome! Happy to help. If you have any other questions, feel free to ask.",
+        "My pleasure! If you have any other questions about the Information Systems Program at Undiksha, I'm here to help.",
+        "No problem! I'm glad I could provide the information you needed. Don't hesitate to ask again.",
+        "You're welcome! I hope the information I provided was helpful. If there's anything else you'd like to know, please ask.",
+        "Thank you too! I'm here to help you with information about the Information Systems Program at Undiksha."
+    ]
+    
+    # Return a random response based on the detected language
+    if is_english:
+        return random.choice(english_responses)
+    else:
+        return random.choice(indonesian_responses)
 
 def is_procedure_question(text):
     """Detect if the user is asking about a procedure or process"""
@@ -426,39 +486,155 @@ def format_dont_know_response(query):
     # Detect query type to give more specific recommendations
     query_lower = query.lower()
     
-    # Base response parts (in Indonesian by default)
-    greeting = "Mohon maaf, "
-    acknowledgment = "saya tidak memiliki informasi spesifik tentang "
+    # Detect language (English or Indonesian)
+    language = detect_language(query)
+    is_english = (language == 'en')
     
-    # Analyze query to determine topic
-    if "skripsi" in query_lower or "tugas akhir" in query_lower:
-        topic = "proses skripsi atau tugas akhir di program studi tersebut"
-        recommendations = [
-            "Anda dapat mengunjungi website resmi Program Studi untuk informasi lengkap tentang prosedur skripsi",
-            "Bagian akademik fakultas biasanya memiliki panduan lengkap tentang proses skripsi",
-            "Dosen pembimbing akademik Anda juga dapat memberikan pengarahan tentang prosedur skripsi"
-        ]
-        clarification = "Saya hanya dapat memberikan informasi tentang proses skripsi di Program Studi Sistem Informasi Undiksha."
+    # Base response parts
+    if is_english:
+        greeting = "I'm sorry, "
+        acknowledgment = "I don't have specific information about "
+        ending = "\n\nIs there anything else I can help you with regarding the Information Systems Program at Undiksha?"
     else:
-        topic = "topik tersebut"
-        recommendations = [
-            "Silakan cek website resmi institusi terkait untuk informasi yang akurat",
-            "Bagian akademik atau administrasi kampus biasanya dapat membantu pertanyaan seperti ini",
-            "Anda mungkin dapat menemukan informasi di sistem informasi akademik universitas"
-        ]
-        clarification = "Saya hanya memiliki informasi tentang Program Studi Sistem Informasi Undiksha."
+        greeting = "Mohon maaf, "
+        acknowledgment = "saya tidak memiliki informasi spesifik tentang "
+        ending = "\n\nApakah ada hal lain yang dapat saya bantu terkait Program Studi Sistem Informasi Undiksha?"
+    
+    # Analyze query to determine topic and provide relevant recommendations
+    if "skripsi" in query_lower or "tugas akhir" in query_lower or "thesis" in query_lower or "final project" in query_lower:
+        if is_english:
+            topic = "the thesis or final project process in that program"
+            recommendations = [
+                "You can visit the official Program website for complete information about thesis procedures",
+                "The faculty's academic department usually has a complete guide about the thesis process",
+                "Your academic advisor can also provide guidance on thesis procedures"
+            ]
+            clarification = "I can only provide information about the thesis process in the Information Systems Program at Undiksha."
+        else:
+            topic = "proses skripsi atau tugas akhir di program studi tersebut"
+            recommendations = [
+                "Anda dapat mengunjungi website resmi Program Studi untuk informasi lengkap tentang prosedur skripsi",
+                "Bagian akademik fakultas biasanya memiliki panduan lengkap tentang proses skripsi",
+                "Dosen pembimbing akademik Anda juga dapat memberikan pengarahan tentang prosedur skripsi"
+            ]
+            clarification = "Saya hanya dapat memberikan informasi tentang proses skripsi di Program Studi Sistem Informasi Undiksha."
+    elif "kurikulum" in query_lower or "curriculum" in query_lower or "mata kuliah" in query_lower or "courses" in query_lower:
+        if is_english:
+            topic = "the specific curriculum or courses you're asking about"
+            recommendations = [
+                "The official Information Systems Program website at Undiksha has detailed curriculum information",
+                "You can check the academic handbook or course catalog for complete course listings",
+                "The academic department can provide the most up-to-date curriculum information"
+            ]
+            clarification = "I can provide general information about the Information Systems Program curriculum at Undiksha, but may not have details about specific courses or recent curriculum changes."
+        else:
+            topic = "kurikulum atau mata kuliah spesifik yang Anda tanyakan"
+            recommendations = [
+                "Website resmi Program Studi Sistem Informasi Undiksha memiliki informasi kurikulum yang detail",
+                "Anda dapat memeriksa buku panduan akademik atau katalog mata kuliah untuk daftar lengkap mata kuliah",
+                "Bagian akademik dapat memberikan informasi kurikulum yang paling terbaru"
+            ]
+            clarification = "Saya dapat memberikan informasi umum tentang kurikulum Program Studi Sistem Informasi Undiksha, tetapi mungkin tidak memiliki detail tentang mata kuliah spesifik atau perubahan kurikulum terbaru."
+    elif "dosen" in query_lower or "lecturer" in query_lower or "professor" in query_lower or "staff" in query_lower:
+        if is_english:
+            topic = "the specific faculty members or staff you're asking about"
+            recommendations = [
+                "The official Information Systems Program website usually has a faculty directory",
+                "You can contact the department office for current faculty information",
+                "The university's main website may have a complete staff directory"
+            ]
+            clarification = "I can provide general information about the Information Systems Program at Undiksha, but may not have up-to-date details about specific faculty members."
+        else:
+            topic = "dosen atau staf spesifik yang Anda tanyakan"
+            recommendations = [
+                "Website resmi Program Studi Sistem Informasi biasanya memiliki direktori dosen",
+                "Anda dapat menghubungi kantor jurusan untuk informasi dosen terkini",
+                "Website utama universitas mungkin memiliki direktori staf lengkap"
+            ]
+            clarification = "Saya dapat memberikan informasi umum tentang Program Studi Sistem Informasi Undiksha, tetapi mungkin tidak memiliki detail terbaru tentang dosen spesifik."
+    else:
+        if is_english:
+            topic = "that specific topic"
+            recommendations = [
+                "Please check the official website of the relevant institution for accurate information",
+                "The academic or administrative department of the university can usually help with such questions",
+                "You may find information in the university's academic information system"
+            ]
+            clarification = "I only have information about the Information Systems Program at Undiksha University."
+        else:
+            topic = "topik spesifik tersebut"
+            recommendations = [
+                "Silakan cek website resmi institusi terkait untuk informasi yang akurat",
+                "Bagian akademik atau administrasi kampus biasanya dapat membantu pertanyaan seperti ini",
+                "Anda mungkin dapat menemukan informasi di sistem informasi akademik universitas"
+            ]
+            clarification = "Saya hanya memiliki informasi tentang Program Studi Sistem Informasi Undiksha."
     
     # Build the response
     response = f"{greeting}{acknowledgment}{topic}.\n\n"
     response += f"{clarification}\n\n"
-    response += "Saran untuk mendapatkan informasi yang Anda cari:\n"
+    
+    if is_english:
+        response += "Suggestions for finding the information you're looking for:\n"
+    else:
+        response += "Saran untuk mendapatkan informasi yang Anda cari:\n"
     
     for i, recommendation in enumerate(recommendations, 1):
         response += f"{i}. {recommendation}\n"
     
-    response += "\nApakah ada hal lain yang dapat saya bantu terkait Program Studi Sistem Informasi Undiksha?"
+    response += ending
     
     return response
+
+def detect_language(text):
+    """
+    Detect whether the text is in English or Indonesian.
+    
+    Args:
+        text (str): The text to analyze
+        
+    Returns:
+        str: 'en' for English, 'id' for Indonesian
+    """
+    text_lower = text.lower()
+    
+    # Common English words
+    english_words = [
+        "what", "how", "when", "where", "who", "why", 
+        "is", "are", "am", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "can", "could",
+        "will", "would", "shall", "should", "may", "might", "must",
+        "the", "a", "an", "this", "that", "these", "those",
+        "and", "but", "or", "if", "because", "although", "unless",
+        "about", "above", "across", "after", "against", "along",
+        "please", "tell", "explain", "describe", "information"
+    ]
+    
+    # Common Indonesian words
+    indonesian_words = [
+        "apa", "bagaimana", "kapan", "dimana", "siapa", "mengapa",
+        "adalah", "merupakan", "menjadi", "ada", "sudah", "telah", "sedang",
+        "akan", "bisa", "dapat", "boleh", "harus", "wajib", "perlu",
+        "ini", "itu", "tersebut", "yang", "dan", "tetapi", "atau", "jika",
+        "karena", "meskipun", "kecuali", "tentang", "di", "ke", "dari",
+        "pada", "untuk", "dengan", "oleh", "dalam", "luar", "atas", "bawah",
+        "tolong", "mohon", "jelaskan", "ceritakan", "informasi", "berikan"
+    ]
+    
+    # Count occurrences of words from each language
+    english_count = sum(1 for word in english_words if f" {word} " in f" {text_lower} ")
+    indonesian_count = sum(1 for word in indonesian_words if f" {word} " in f" {text_lower} ")
+    
+    # Add weight for common Indonesian question patterns
+    if any(pattern in text_lower for pattern in ["apa itu", "siapa itu", "bagaimana cara", "kapan waktu", "dimana tempat"]):
+        indonesian_count += 2
+    
+    # Add weight for common English question patterns
+    if any(pattern in text_lower for pattern in ["what is", "who is", "how to", "when is", "where is"]):
+        english_count += 2
+    
+    # Return the detected language
+    return "en" if english_count > indonesian_count else "id"
 
 def generation(user_input, show_process=True):
     global rag_chain
@@ -470,6 +646,10 @@ def generation(user_input, show_process=True):
     # Flag to indicate if this is a request for more details
     is_detail_request = is_asking_for_details(user_input)
     
+    # Detect language
+    language = detect_language(user_input)
+    is_english = (language == 'en')
+    
     # Ensure rag_chain is initialized
     try:
         if rag_chain is None:
@@ -479,11 +659,11 @@ def generation(user_input, show_process=True):
                 raise ValueError("Failed to initialize rag_chain properly")
     except Exception as e:
         logger.error(f"Failed to initialize RAG chain: {e}")
-        return "Maaf, sistem tidak dapat memproses pertanyaan Anda saat ini. Terjadi masalah dalam inisialisasi komponen pencarian."
+        return "Maaf, sistem tidak dapat memproses pertanyaan Anda saat ini. Terjadi masalah dalam inisialisasi komponen pencarian." if not is_english else "Sorry, the system cannot process your question at this time. There was a problem initializing the search component."
     
     if show_process:
         st.subheader("2. Generation")
-        with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..."):
+        with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..." if not is_english else "Generating the best answer for you, please wait..."):
             progress_bar = st.progress(0)
             for i in range(100):
                 time.sleep(0.01)
@@ -534,36 +714,125 @@ def generation(user_input, show_process=True):
                 "i do not have information"
             ]
             
+            # Check if the answer is too short (less than 50 words)
+            is_short_answer = len(answer.split()) < 50
+            
+            # Check if it's a general information question about the program
+            is_general_info_question = any(phrase in user_input.lower() for phrase in [
+                "apa itu", "what is", "tell me about", "ceritakan tentang", 
+                "jelaskan tentang", "explain about", "informasi tentang",
+                "information about", "program studi", "program study"
+            ])
+            
             # If it's a simple "don't know" response, replace it with our formatted response
-            if any(phrase in answer.lower() for phrase in dont_know_phrases) and len(answer.split()) < 30:
+            if any(phrase in answer.lower() for phrase in dont_know_phrases) and is_short_answer:
                 answer = format_dont_know_response(user_input)
+            
+            # If it's a general information question but the answer is too short, enhance it
+            elif is_general_info_question and is_short_answer:
+                # Get more context for this type of question
+                embedded_data, _ = chunking_and_retrieval(user_input, show_process=False)
+                
+                # Extract the top chunks
+                additional_context = ""
+                for chunk, _ in embedded_data[:3]:  # Use top 3 chunks
+                    additional_context += chunk + " "
+                
+                # Enhance the answer with more information
+                enhanced_prompt = f"""
+                The user asked: "{user_input}"
+                
+                You initially responded with: "{answer}"
+                
+                This response is too brief. Please enhance it with the following additional information:
+                {additional_context}
+                
+                Create a comprehensive response that:
+                1. Introduces the Program Studi Sistem Informasi Undiksha
+                2. Describes its curriculum and focus areas
+                3. Mentions any specializations or concentrations
+                4. Ends with an offer to provide more specific information
+                
+                The user's language is {"English" if is_english else "Indonesian"}.
+                Respond in {"English" if is_english else "Indonesian"}.
+                """
+                
+                try:
+                    # Use the LLM to enhance the answer
+                    llm = ChatOpenAI(
+                        model_name="gpt-3.5-turbo",
+                        openai_api_key=openai_api_key
+                    )
+                    enhanced_answer = llm.invoke(enhanced_prompt)
+                    answer = enhanced_answer.content
+                except Exception as e:
+                    logger.error(f"Error enhancing answer: {e}")
+                    # If enhancement fails, add a generic enhancement
+                    if not is_english:
+                        answer += "\n\nProgram Studi Sistem Informasi di Undiksha menawarkan kurikulum yang komprehensif yang mencakup mata kuliah dasar dan lanjutan dalam bidang sistem informasi. Program ini memiliki beberapa konsentrasi seperti Manajemen Sistem Informasi, Rekayasa dan Kecerdasan Bisnis, serta Keamanan Siber. Jika Anda memerlukan informasi lebih spesifik tentang aspek tertentu dari program studi ini, silakan tanyakan."
+                    else:
+                        answer += "\n\nThe Information Systems Program at Undiksha offers a comprehensive curriculum covering both foundational and advanced courses in information systems. The program has several concentrations including Information Systems Management, Business Intelligence and Engineering, and Cyber Security. If you need more specific information about certain aspects of this program, please ask."
                 
             # Check if this is a procedure question but the answer is too short
-            if is_procedure_question(user_input) and len(answer.split()) < 30 and not is_detail_request:
+            if is_procedure_question(user_input) and len(answer.split()) < 50 and not is_detail_request:
                 # If the answer is too short for a procedure question, ask for more details
                 logger.warning(f"Answer too short for procedure question: {answer}")
-                answer += "\n\nApakah Anda ingin saya menjelaskan lebih detail tentang prosedur ini? Silakan beri tahu saya bagian mana yang ingin Anda ketahui lebih lanjut."
+                if not is_english:
+                    answer += "\n\nApakah Anda ingin saya menjelaskan lebih detail tentang prosedur ini? Silakan beri tahu saya bagian mana yang ingin Anda ketahui lebih lanjut."
+                else:
+                    answer += "\n\nWould you like me to explain this procedure in more detail? Please let me know which part you would like to know more about."
             
             # If this is a request for more details, make sure the answer is comprehensive
             if is_detail_request and len(answer.split()) < 100:
                 logger.warning(f"Answer too short for detail request: {answer}")
-                answer += "\n\nSaya harap penjelasan ini membantu. Jika Anda memerlukan informasi lebih spesifik, silakan tanyakan bagian tertentu yang ingin Anda ketahui lebih dalam."
+                if not is_english:
+                    answer += "\n\nSaya harap penjelasan ini membantu. Jika Anda memerlukan informasi lebih spesifik, silakan tanyakan bagian tertentu yang ingin Anda ketahui lebih dalam."
+                else:
+                    answer += "\n\nI hope this explanation helps. If you need more specific information, please ask about the particular aspect you'd like to know more about."
         else:
             logger.warning(f"Unexpected response format: {response}")
-            answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini."
+            answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini." if not is_english else "Sorry, I cannot process your question at this time."
             
     except Exception as e:
         logger.error(f"Error generating response: {e}", exc_info=True)
         # Provide more informative error message
         if "name 'rag_chain' is not defined" in str(e):
-            answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini."
+            answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini." if not is_english else "Sorry, there was an error in the search component. Our technical team is working to resolve this issue."
         else:
-            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Silakan coba kembali beberapa saat lagi atau coba pertanyaan lain. Jika masalah berlanjut, silakan hubungi administrator sistem."
+            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Silakan coba kembali beberapa saat lagi atau coba pertanyaan lain. Jika masalah berlanjut, silakan hubungi administrator sistem." if not is_english else "Sorry, there was an error processing your question. Please try again later or try a different question. If the problem persists, please contact the system administrator."
     
     if show_process:
-        st.success("Jawaban siap! 🚀")
+        st.success("Jawaban siap! 🚀" if not is_english else "Answer ready! 🚀")
         
     return answer
+
+def check_and_refresh_rss_feed():
+    """
+    Checks if the RSS feed needs to be refreshed based on the last update time.
+    If it's been more than 1 hour since the last update, refreshes the feed.
+    """
+    # Check if we need to initialize the RSS feed
+    if "latest_rss_posts" not in st.session_state:
+        st.session_state.latest_rss_posts = get_latest_posts(formatted=True, embed_posts=False)
+        st.session_state.rss_last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        logger.info("RSS posts fetched and stored in session state")
+        return
+        
+    # Check if we need to refresh the RSS feed (if it's been more than 1 hour)
+    if "rss_last_updated" in st.session_state:
+        try:
+            last_updated = datetime.datetime.strptime(st.session_state.rss_last_updated, "%Y-%m-%d %H:%M:%S")
+            now = datetime.datetime.now()
+            time_diff = now - last_updated
+            
+            # If it's been more than 1 hour, refresh the feed
+            if time_diff.total_seconds() > 3600:  # 1 hour in seconds
+                logger.info("RSS feed is stale, refreshing...")
+                st.session_state.latest_rss_posts = get_latest_posts(formatted=True, embed_posts=False)
+                st.session_state.rss_last_updated = now.strftime("%Y-%m-%d %H:%M:%S")
+                logger.info("RSS posts refreshed automatically")
+        except Exception as e:
+            logger.error(f"Error checking RSS feed refresh time: {e}")
 
 def main():
     st.set_page_config(
@@ -583,36 +852,53 @@ def main():
     if "dev_mode_query_embedding" not in st.session_state:
         st.session_state.dev_mode_query_embedding = None
     
-    if "dev_mode_csv_path" not in st.session_state:
-        st.session_state.dev_mode_csv_path = None
-        
-    # Store the original query
     if "dev_mode_query" not in st.session_state:
         st.session_state.dev_mode_query = None
-        
-    # Store the latest answer
+    
+    if "dev_mode_csv_path" not in st.session_state:
+        st.session_state.dev_mode_csv_path = None
+    
     if "dev_mode_latest_answer" not in st.session_state:
         st.session_state.dev_mode_latest_answer = None
-        
-    # Flag to track if we're processing a new question
+    
     if "processing_new_question" not in st.session_state:
         st.session_state.processing_new_question = False
     
-    # Sidebar
+    # Check and refresh RSS feed if needed
+    check_and_refresh_rss_feed()
+    
+    # Initialize RSS last updated timestamp if not exists
+    if "rss_last_updated" not in st.session_state:
+        st.session_state.rss_last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Sidebar for mode selection and settings
     with st.sidebar:
-        st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=150)
+        st.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s", width=100)
         st.title("Virtual Assistant SI Undiksha")
-        mode = st.selectbox("Mode", ["User Mode", "Developer Mode"])
         
-        # Add CSV export option in developer mode
-        export_to_csv = False
+        # Mode selection
+        mode = st.radio("Mode", ["User Mode", "Developer Mode"])
+        
+        # Developer mode options
         if mode == "Developer Mode":
             export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
         
         st.text("Universitas Pendidikan Ganesha")
         st.markdown("---")
         with st.expander("Lihat Info Terkini"):
-            latest_posts = get_latest_posts(formatted=True)
+            # Add a refresh button for RSS posts
+            col1, col2 = st.columns([4, 1])
+            with col2:
+                if st.button("🔄", help="Refresh informasi terkini"):
+                    st.session_state.latest_rss_posts = get_latest_posts(formatted=True, embed_posts=False)
+                    st.session_state.rss_last_updated = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    st.rerun()
+            
+            # Display last updated timestamp
+            st.caption(f"Terakhir diperbarui: {st.session_state.rss_last_updated}")
+            
+            # Use cached RSS posts from session state
+            latest_posts = st.session_state.latest_rss_posts
             if latest_posts:
                 for post in latest_posts:
                     st.markdown(f"- [{post['title']}]({post['link']})")

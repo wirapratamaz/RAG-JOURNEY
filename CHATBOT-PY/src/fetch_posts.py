@@ -1,9 +1,19 @@
 import logging
 import sys
+import time
+import os
+import json
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Cache directory
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+RSS_CACHE_FILE = os.path.join(CACHE_DIR, "rss_cache.json")
+RSS_CACHE_EXPIRY = 3600  # Cache expiry in seconds (1 hour)
 
 # Try to import necessary modules
 try:
@@ -157,24 +167,41 @@ def process_and_embed_posts(posts):
     
     return posts
 
-def get_latest_posts(formatted=False, max_posts=3):
+def get_latest_posts(formatted=False, max_posts=3, use_cache=True, embed_posts=False):
     """
     Fetches and optionally processes the latest RSS feed posts.
     
     Args:
         formatted (bool): If True, returns the posts in a formatted manner for display.
         max_posts (int): Maximum number of posts to return.
+        use_cache (bool): If True, tries to use cached posts if available and not expired.
+        embed_posts (bool): If True, embeds the posts in the vector store. This is an expensive operation.
         
     Returns:
         list: Returns processed posts.
     """
-    logger.info(f"Getting latest posts, formatted={formatted}, max_posts={max_posts}")
+    logger.info(f"Getting latest posts, formatted={formatted}, max_posts={max_posts}, use_cache={use_cache}, embed_posts={embed_posts}")
     
-    # Fetch posts from feed
-    posts = fetch_rss_posts(max_posts=max_posts)
+    # Try to use cache if requested
+    if use_cache:
+        cached_posts = _get_cached_posts()
+        if cached_posts:
+            logger.info("Using cached RSS posts")
+            posts = cached_posts
+        else:
+            # Fetch posts from feed
+            posts = fetch_rss_posts(max_posts=max_posts)
+            
+            # Cache the posts
+            if posts:
+                _cache_posts(posts)
+    else:
+        # Fetch posts from feed without using cache
+        posts = fetch_rss_posts(max_posts=max_posts)
     
-    # Try to process and embed if we have posts
-    if posts:
+    # Try to process and embed if we have posts and embedding is requested
+    if posts and embed_posts:
+        logger.info("Embedding posts in vector store")
         process_and_embed_posts(posts)
     
     if formatted:
@@ -189,3 +216,93 @@ def get_latest_posts(formatted=False, max_posts=3):
         ]
     else:
         return posts
+
+def _get_cached_posts():
+    """
+    Retrieves cached posts if they exist and are not expired.
+    
+    Returns:
+        list: Cached posts or None if cache is invalid or expired.
+    """
+    try:
+        if not os.path.exists(RSS_CACHE_FILE):
+            return None
+            
+        # Check file modification time
+        mod_time = os.path.getmtime(RSS_CACHE_FILE)
+        if time.time() - mod_time > RSS_CACHE_EXPIRY:
+            logger.info("RSS cache expired")
+            return None
+            
+        with open(RSS_CACHE_FILE, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+            
+        # Validate cache structure
+        if not isinstance(cache_data, dict) or 'posts' not in cache_data:
+            logger.warning("Invalid cache structure")
+            return None
+            
+        # Check timestamp if available
+        if 'timestamp' in cache_data:
+            cache_time = datetime.fromisoformat(cache_data['timestamp'])
+            if datetime.now() - cache_time > timedelta(seconds=RSS_CACHE_EXPIRY):
+                logger.info("RSS cache timestamp expired")
+                return None
+                
+        return cache_data['posts']
+    except Exception as e:
+        logger.error(f"Error reading RSS cache: {e}")
+        return None
+
+def _cache_posts(posts):
+    """
+    Caches the posts to a file.
+    
+    Args:
+        posts (list): The posts to cache.
+    """
+    try:
+        cache_data = {
+            'timestamp': datetime.now().isoformat(),
+            'posts': posts
+        }
+        
+        with open(RSS_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            
+        logger.info(f"Cached {len(posts)} RSS posts")
+    except Exception as e:
+        logger.error(f"Error caching RSS posts: {e}")
+
+def embed_latest_posts(max_posts=10):
+    """
+    Fetches the latest RSS posts and embeds them in the vector store.
+    This function is intended to be run periodically as a maintenance task.
+    
+    Args:
+        max_posts (int): Maximum number of posts to fetch and embed.
+        
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    try:
+        logger.info(f"Fetching and embedding latest {max_posts} RSS posts")
+        
+        # Fetch posts from feed without using cache
+        posts = fetch_rss_posts(max_posts=max_posts)
+        
+        if not posts:
+            logger.warning("No posts fetched for embedding")
+            return False
+            
+        # Process and embed the posts
+        process_and_embed_posts(posts)
+        
+        # Update the cache with the latest posts
+        _cache_posts(posts)
+        
+        logger.info(f"Successfully embedded {len(posts)} RSS posts")
+        return True
+    except Exception as e:
+        logger.error(f"Error embedding latest posts: {e}")
+        return False
