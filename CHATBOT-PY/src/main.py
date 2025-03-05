@@ -320,14 +320,6 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         full_embedding = str(query_embedding.tolist())
         st.text_area("Full embedding vector:", full_embedding, height=200)
         
-        # Add a button to download the full embedding
-        st.download_button(
-            label="Download Question Embedding",
-            data=full_embedding,
-            file_name="question_embedding.txt",
-            mime="text/plain"
-        )
-        
         # Add a separator
         st.markdown("---")
         
@@ -339,9 +331,11 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         for i, (chunk, score) in enumerate(embedded_data, 1):
             # Generate vector for the chunk
             chunk_embedding = model.encode(chunk).tolist()
+            # Format the chunk as a paragraph by replacing newlines with spaces
+            formatted_chunk = ' '.join(chunk.split())
             chunks_data.append({
                 "No": i,
-                "Chunk": chunk,
+                "Chunk": formatted_chunk,
                 "Vektor": str(chunk_embedding),
                 "Score": f"{score:.6f}"
             })
@@ -349,8 +343,17 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         # Create DataFrame
         chunks_df = pd.DataFrame(chunks_data)
         
-        # Display the table
-        st.dataframe(chunks_df)
+        # Display the table with adjusted column widths
+        st.dataframe(
+            chunks_df,
+            column_config={
+                "No": st.column_config.NumberColumn(width="small"),
+                "Chunk": st.column_config.TextColumn(width="large"),
+                "Vektor": st.column_config.TextColumn(width="medium"),
+                "Score": st.column_config.NumberColumn(width="small", format="%.6f")
+            },
+            hide_index=True
+        )
         
         # Add a separator
         st.markdown("---")
@@ -376,12 +379,21 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         # Prepare data for display
         data = {
             "No": range(1, len(filtered_data) + 1),
-            "Chunk": [chunk for chunk, _ in filtered_data],
+            "Chunk": [' '.join(chunk.split()) for chunk, _ in filtered_data],
             "Score": [score for _, score in filtered_data]
         }
         
         df = pd.DataFrame(data)
-        st.dataframe(df)
+        # Display the dataframe with improved formatting
+        st.dataframe(
+            df,
+            column_config={
+                "No": st.column_config.NumberColumn(width="small"),
+                "Chunk": st.column_config.TextColumn(width="large"),
+                "Score": st.column_config.NumberColumn(width="small", format="%.6f")
+            },
+            hide_index=True
+        )
         
         # Add a section to display the full raw text of filtered chunks
         st.subheader("Top Retrieved Content")
@@ -398,17 +410,6 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         
         # Display the formatted content
         st.text_area("Top filtered chunks:", full_content, height=200)
-        
-        # Always show all chunks
-        if len(embedded_data) > num_chunks:
-            st.subheader("All Retrieved Chunks")
-            all_formatted_chunks = []
-            for i, (chunk, score) in enumerate(embedded_data, 1):
-                cleaned_chunk = ' '.join(chunk.split())
-                all_formatted_chunks.append(f"Chunk {i} [Score: {score:.4f}] {cleaned_chunk}")
-            
-            all_content = "\n\n".join(all_formatted_chunks)
-            st.text_area("All chunks with scores:", all_content, height=400)
     
     st.success("Analisis informasi selesai!")
 
