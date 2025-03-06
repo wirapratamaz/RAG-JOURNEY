@@ -3,6 +3,20 @@ import sys
 import streamlit as st
 import logging
 
+# Patch to prevent torch._classes.__path__._path error in Streamlit's file watcher
+import importlib.abc
+import importlib.machinery
+
+class CustomImportFixer(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        # Intercept attempts to access problematic module paths
+        if fullname == 'torch._classes.__path__._path' or fullname.endswith('.__path__._path'):
+            return None
+        return None
+
+# Add the import hook to sys.meta_path
+sys.meta_path.insert(0, CustomImportFixer())
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

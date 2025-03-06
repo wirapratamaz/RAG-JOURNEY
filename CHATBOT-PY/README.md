@@ -137,3 +137,30 @@ To deploy this application to Streamlit Community Cloud, follow these steps:
 Your app will now be deployed and publicly accessible via the URL provided by Streamlit!
 
 ![alt text](image.png)
+
+## RSS Feed Integration
+
+The application includes RSS feed integration to display the latest posts from the Undiksha Information Systems Program website. This feature has been optimized for performance:
+
+1. **Cached RSS Feeds**: RSS feeds are fetched once and cached to improve performance. The cache is stored in the `cache/` directory and has a default expiry of 1 hour.
+
+2. **Separation of Fetching and Embedding**: 
+   - By default, RSS posts are fetched but not embedded in the vector store during normal operation
+   - This significantly improves performance by avoiding expensive embedding operations
+
+3. **Manual Embedding**: 
+   - A separate script is provided to manually embed RSS posts in the vector store
+   - This can be run as a scheduled task to keep the vector store updated
+
+4. **Usage**:
+   - To manually embed RSS posts, run:
+     ```bash
+     python embed_rss_posts.py --max-posts 10
+     ```
+   - This script can be scheduled to run periodically (e.g., using cron or Task Scheduler)
+
+5. **Refresh Button**:
+   - The UI includes a refresh button (🔄) to manually refresh the RSS feed
+   - This only updates the displayed posts and does not perform embedding
+
+This approach ensures that the application remains responsive while still providing up-to-date information from the RSS feed.
