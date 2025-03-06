@@ -636,6 +636,27 @@ def detect_language(text):
     # Return the detected language
     return "en" if english_count > indonesian_count else "id"
 
+def format_response(answer, is_english=False):
+    """
+    Format the response to be more conversational and engaging
+    """
+    # Add greeting based on the content
+    if "skripsi" in answer.lower() or "thesis" in answer.lower():
+        greeting = "Baik, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
+    else:
+        greeting = "Baik, " if not is_english else "Alright, "
+
+    # Add conversation markers
+    if is_english:
+        closing = "\n\nIs there anything specific about these stages that you'd like to know more about? I'm here to help! 😊"
+    else:
+        closing = "\n\nApakah ada tahapan spesifik yang ingin Anda ketahui lebih detail? Saya siap membantu! 😊"
+
+    # Combine all parts
+    formatted_answer = f"{greeting}{answer}{closing}"
+    
+    return formatted_answer
+
 def generation(user_input, show_process=True):
     global rag_chain
     
@@ -698,6 +719,9 @@ def generation(user_input, show_process=True):
         
         if isinstance(response, dict) and "answer" in response:
             answer = response["answer"]
+            
+            # Format the response to be more conversational
+            answer = format_response(answer, is_english=is_english)
             
             # Check if the response is a simple "I don't know" response
             dont_know_phrases = [
@@ -834,18 +858,34 @@ def check_and_refresh_rss_feed():
         except Exception as e:
             logger.error(f"Error checking RSS feed refresh time: {e}")
 
+def check_auth(username, password):
+    """Check if username and password match the hardcoded values"""
+    return username == "adminsi" and password == "adminsi"
+
 def main():
     st.set_page_config(
         page_title="Virtual Assistant SI Undiksha",
         page_icon="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s",
-        layout="wide"
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
     
-    # Initialize session state for chat history if it doesn't exist
+    # Force light theme
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: #FFFFFF;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Initialize session states
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
     
-    # Initialize other session state variables for developer mode
+    # Initialize other session states...
     if "dev_mode_embedded_data" not in st.session_state:
         st.session_state.dev_mode_embedded_data = None
     
@@ -879,9 +919,31 @@ def main():
         # Mode selection
         mode = st.radio("Mode", ["User Mode", "Developer Mode"])
         
-        # Developer mode options
+        # Developer mode authentication
         if mode == "Developer Mode":
-            export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
+            if not st.session_state.authenticated:
+                with st.form("auth_form"):
+                    st.subheader("Developer Authentication")
+                    username = st.text_input("Username")
+                    password = st.text_input("Password", type="password")
+                    submit = st.form_submit_button("Login")
+                    
+                    if submit:
+                        if check_auth(username, password):
+                            st.session_state.authenticated = True
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+                
+                # If not authenticated, show user mode
+                mode = "User Mode"
+            
+            # Only show developer options if authenticated
+            if st.session_state.authenticated:
+                export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
+                if st.button("Logout"):
+                    st.session_state.authenticated = False
+                    st.rerun()
         
         st.text("Universitas Pendidikan Ganesha")
         st.markdown("---")

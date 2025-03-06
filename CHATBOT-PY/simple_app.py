@@ -24,6 +24,15 @@ def main():
         layout="wide"
     )
     
+    # Force light theme
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: #FFFFFF;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     # Initialize session state for chat history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
