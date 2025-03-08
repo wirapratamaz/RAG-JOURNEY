@@ -319,6 +319,25 @@ def is_asking_for_details(text):
     # Check if any detail keyword is in the text
     return any(keyword in text_lower for keyword in detail_keywords)
 
+def is_greeting(text: str) -> bool:
+    """Check if the input is a greeting"""
+    greetings = {
+        'halo', 'hello', 'hi', 'hai', 'hey', 'hallo', 'helo',
+        'selamat pagi', 'selamat siang', 'selamat sore', 'selamat malam',
+        'pagi', 'siang', 'sore', 'malam'
+    }
+    return text.strip().lower() in greetings
+
+def get_greeting_response(text: str) -> str:
+    """Generate appropriate greeting response"""
+    # Detect language
+    is_english = detect_language(text) == 'en'
+    
+    if is_english:
+        return "Hello! 👋 I'm the virtual assistant for Undiksha's Information Systems Program. How can I help you today?"
+    else:
+        return "Halo! 👋 Saya adalah asisten virtual Program Studi Sistem Informasi Undiksha. Ada yang bisa saya bantu hari ini?"
+
 def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     if show_process:
         st.subheader("1. Chunking and Retrieval")
@@ -636,175 +655,215 @@ def detect_language(text):
     # Return the detected language
     return "en" if english_count > indonesian_count else "id"
 
-def generation(user_input, show_process=True):
-    global rag_chain
-    
-    # Check if the user is expressing gratitude
-    if is_gratitude_expression(user_input):
-        return get_gratitude_response()
-    
-    # Flag to indicate if this is a request for more details
-    is_detail_request = is_asking_for_details(user_input)
-    
-    # Detect language
-    language = detect_language(user_input)
-    is_english = (language == 'en')
-    
-    # Ensure rag_chain is initialized
-    try:
-        if rag_chain is None:
-            logger.info("Initializing RAG chain for the first time")
-            rag_chain = initialize_rag_chain()
-            if rag_chain is None:
-                raise ValueError("Failed to initialize rag_chain properly")
-    except Exception as e:
-        logger.error(f"Failed to initialize RAG chain: {e}")
-        return "Maaf, sistem tidak dapat memproses pertanyaan Anda saat ini. Terjadi masalah dalam inisialisasi komponen pencarian." if not is_english else "Sorry, the system cannot process your question at this time. There was a problem initializing the search component."
-    
-    if show_process:
-        st.subheader("2. Generation")
-        with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..." if not is_english else "Generating the best answer for you, please wait..."):
-            progress_bar = st.progress(0)
-            for i in range(100):
-                time.sleep(0.01)
-                progress_bar.progress(i + 1)
+def format_response(answer, is_english=False):
+    """
+    Format the response to be more conversational and engaging
+    """
+    # Add greeting based on the content
+    if "skripsi" in answer.lower() or "thesis" in answer.lower():
+        greeting = "Baik, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
     else:
-        with st.spinner("Generating response..."):
-            time.sleep(1)  # Minimal delay for user feedback
+        greeting = "Baik, " if not is_english else "Alright, "
+
+    # Add conversation markers
+    if is_english:
+        closing = "\n\nIs there anything specific about these stages that you'd like to know more about? I'm here to help! 😊"
+    else:
+        closing = "\n\nApakah ada tahapan spesifik yang ingin Anda ketahui lebih detail? Saya siap membantu! 😊"
+
+    # Combine all parts
+    formatted_answer = f"{greeting}{answer}{closing}"
     
+    return formatted_answer
+
+def generation(user_input, show_process=False):
     try:
-        # Convert chat history to the format expected by the RAG chain
-        formatted_history = []
-        for msg in st.session_state.get('chat_history', []):
-            if len(formatted_history) > 0 and msg["role"] == "user":
-                # Only include the most recent conversation pairs to avoid context overflow
-                if len(formatted_history) > 4:
-                    formatted_history = formatted_history[-4:]
-                formatted_history.append((msg["content"], ""))
-            elif len(formatted_history) > 0 and msg["role"] == "assistant":
-                last_pair = formatted_history[-1]
-                formatted_history[-1] = (last_pair[0], msg["content"])
+        # First, check if it's a simple greeting
+        if is_greeting(user_input.strip().lower()):
+            # Return ONLY the greeting response, nothing else
+            is_english = detect_language(user_input) == 'en'
+            if is_english:
+                return "Hi there! 👋 I'm here to help you with information about Undiksha's Information Systems Program. What would you like to know?"
+            else:
+                return "Halo! 👋 Saya di sini untuk membantu Anda dengan informasi seputar Program Studi Sistem Informasi Undiksha. Apa yang ingin Anda ketahui?"
         
-        # Add additional logging to track what's happening
-        logger.debug(f"Formatted history: {formatted_history}")
-        logger.debug(f"Current question: {user_input}")
-        logger.debug(f"RAG chain type: {type(rag_chain)}")
+        # If not a greeting, proceed with regular response generation
+        global rag_chain
         
-        # Call the RAG chain with the formatted history
-        response = rag_chain.invoke({
-            "question": user_input,
-            "chat_history": formatted_history
-        })
+        # Check if the user is expressing gratitude
+        if is_gratitude_expression(user_input):
+            return get_gratitude_response()
         
-        if isinstance(response, dict) and "answer" in response:
-            answer = response["answer"]
+        # Flag to indicate if this is a request for more details
+        is_detail_request = is_asking_for_details(user_input)
+        
+        # Detect language
+        language = detect_language(user_input)
+        is_english = (language == 'en')
+        
+        # Ensure rag_chain is initialized
+        try:
+            if rag_chain is None:
+                logger.info("Initializing RAG chain for the first time")
+                rag_chain = initialize_rag_chain()
+                if rag_chain is None:
+                    raise ValueError("Failed to initialize rag_chain properly")
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG chain: {e}")
+            return "Maaf, sistem tidak dapat memproses pertanyaan Anda saat ini. Terjadi masalah dalam inisialisasi komponen pencarian." if not is_english else "Sorry, the system cannot process your question at this time. There was a problem initializing the search component."
+        
+        if show_process:
+            st.subheader("2. Generation")
+            with st.spinner("Sedang menyusun jawaban terbaik untuk Anda sabar dulu yaah..." if not is_english else "Generating the best answer for you, please wait..."):
+                progress_bar = st.progress(0)
+                for i in range(100):
+                    time.sleep(0.01)
+                    progress_bar.progress(i + 1)
+        else:
+            with st.spinner("Generating response..."):
+                time.sleep(1)  # Minimal delay for user feedback
+        
+        try:
+            # Convert chat history to the format expected by the RAG chain
+            formatted_history = []
+            for msg in st.session_state.get('chat_history', []):
+                if len(formatted_history) > 0 and msg["role"] == "user":
+                    # Only include the most recent conversation pairs to avoid context overflow
+                    if len(formatted_history) > 4:
+                        formatted_history = formatted_history[-4:]
+                    formatted_history.append((msg["content"], ""))
+                elif len(formatted_history) > 0 and msg["role"] == "assistant":
+                    last_pair = formatted_history[-1]
+                    formatted_history[-1] = (last_pair[0], msg["content"])
             
-            # Check if the response is a simple "I don't know" response
-            dont_know_phrases = [
-                "saya tidak tahu", 
-                "tidak mengetahui", 
-                "tidak memiliki informasi", 
-                "tidak dapat memberikan informasi",
-                "maaf, saya tidak",
-                "i don't know",
-                "i do not know",
-                "i don't have",
-                "i don't have specific information",
-                "i don't have information",
-                "i do not have information"
-            ]
+            # Add additional logging to track what's happening
+            logger.debug(f"Formatted history: {formatted_history}")
+            logger.debug(f"Current question: {user_input}")
+            logger.debug(f"RAG chain type: {type(rag_chain)}")
             
-            # Check if the answer is too short (less than 50 words)
-            is_short_answer = len(answer.split()) < 50
+            # Call the RAG chain with the formatted history
+            response = rag_chain.invoke({
+                "question": user_input,
+                "chat_history": formatted_history
+            })
             
-            # Check if it's a general information question about the program
-            is_general_info_question = any(phrase in user_input.lower() for phrase in [
-                "apa itu", "what is", "tell me about", "ceritakan tentang", 
-                "jelaskan tentang", "explain about", "informasi tentang",
-                "information about", "program studi", "program study"
-            ])
-            
-            # If it's a simple "don't know" response, replace it with our formatted response
-            if any(phrase in answer.lower() for phrase in dont_know_phrases) and is_short_answer:
-                answer = format_dont_know_response(user_input)
-            
-            # If it's a general information question but the answer is too short, enhance it
-            elif is_general_info_question and is_short_answer:
-                # Get more context for this type of question
-                embedded_data, _ = chunking_and_retrieval(user_input, show_process=False)
+            if isinstance(response, dict) and "answer" in response:
+                answer = response["answer"]
                 
-                # Extract the top chunks
-                additional_context = ""
-                for chunk, _ in embedded_data[:3]:  # Use top 3 chunks
-                    additional_context += chunk + " "
+                # Format the response to be more conversational
+                answer = format_response(answer, is_english=is_english)
                 
-                # Enhance the answer with more information
-                enhanced_prompt = f"""
-                The user asked: "{user_input}"
+                # Check if the response is a simple "I don't know" response
+                dont_know_phrases = [
+                    "saya tidak tahu", 
+                    "tidak mengetahui", 
+                    "tidak memiliki informasi", 
+                    "tidak dapat memberikan informasi",
+                    "maaf, saya tidak",
+                    "i don't know",
+                    "i do not know",
+                    "i don't have",
+                    "i don't have specific information",
+                    "i don't have information",
+                    "i do not have information"
+                ]
                 
-                You initially responded with: "{answer}"
+                # Check if the answer is too short (less than 50 words)
+                is_short_answer = len(answer.split()) < 50
                 
-                This response is too brief. Please enhance it with the following additional information:
-                {additional_context}
+                # Check if it's a general information question about the program
+                is_general_info_question = any(phrase in user_input.lower() for phrase in [
+                    "apa itu", "what is", "tell me about", "ceritakan tentang", 
+                    "jelaskan tentang", "explain about", "informasi tentang",
+                    "information about", "program studi", "program study"
+                ])
                 
-                Create a comprehensive response that:
-                1. Introduces the Program Studi Sistem Informasi Undiksha
-                2. Describes its curriculum and focus areas
-                3. Mentions any specializations or concentrations
-                4. Ends with an offer to provide more specific information
+                # If it's a simple "don't know" response, replace it with our formatted response
+                if any(phrase in answer.lower() for phrase in dont_know_phrases) and is_short_answer:
+                    answer = format_dont_know_response(user_input)
                 
-                The user's language is {"English" if is_english else "Indonesian"}.
-                Respond in {"English" if is_english else "Indonesian"}.
-                """
+                # If it's a general information question but the answer is too short, enhance it
+                elif is_general_info_question and is_short_answer:
+                    # Get more context for this type of question
+                    embedded_data, _ = chunking_and_retrieval(user_input, show_process=False)
+                    
+                    # Extract the top chunks
+                    additional_context = ""
+                    for chunk, _ in embedded_data[:3]:  # Use top 3 chunks
+                        additional_context += chunk + " "
+                    
+                    # Enhance the answer with more information
+                    enhanced_prompt = f"""
+                    The user asked: "{user_input}"
+                    
+                    You initially responded with: "{answer}"
+                    
+                    This response is too brief. Please enhance it with the following additional information:
+                    {additional_context}
+                    
+                    Create a comprehensive response that:
+                    1. Introduces the Program Studi Sistem Informasi Undiksha
+                    2. Describes its curriculum and focus areas
+                    3. Mentions any specializations or concentrations
+                    4. Ends with an offer to provide more specific information
+                    
+                    The user's language is {"English" if is_english else "Indonesian"}.
+                    Respond in {"English" if is_english else "Indonesian"}.
+                    """
+                    
+                    try:
+                        # Use the LLM to enhance the answer
+                        llm = ChatOpenAI(
+                            model_name="gpt-3.5-turbo",
+                            openai_api_key=openai_api_key
+                        )
+                        enhanced_answer = llm.invoke(enhanced_prompt)
+                        answer = enhanced_answer.content
+                    except Exception as e:
+                        logger.error(f"Error enhancing answer: {e}")
+                        # If enhancement fails, add a generic enhancement
+                        if not is_english:
+                            answer += "\n\nProgram Studi Sistem Informasi di Undiksha menawarkan kurikulum yang komprehensif yang mencakup mata kuliah dasar dan lanjutan dalam bidang sistem informasi. Program ini memiliki beberapa konsentrasi seperti Manajemen Sistem Informasi, Rekayasa dan Kecerdasan Bisnis, serta Keamanan Siber. Jika Anda memerlukan informasi lebih spesifik tentang aspek tertentu dari program studi ini, silakan tanyakan."
+                        else:
+                            answer += "\n\nThe Information Systems Program at Undiksha offers a comprehensive curriculum covering both foundational and advanced courses in information systems. The program has several concentrations including Information Systems Management, Business Intelligence and Engineering, and Cyber Security. If you need more specific information about certain aspects of this program, please ask."
                 
-                try:
-                    # Use the LLM to enhance the answer
-                    llm = ChatOpenAI(
-                        model_name="gpt-3.5-turbo",
-                        openai_api_key=openai_api_key
-                    )
-                    enhanced_answer = llm.invoke(enhanced_prompt)
-                    answer = enhanced_answer.content
-                except Exception as e:
-                    logger.error(f"Error enhancing answer: {e}")
-                    # If enhancement fails, add a generic enhancement
+                # Check if this is a procedure question but the answer is too short
+                if is_procedure_question(user_input) and len(answer.split()) < 50 and not is_detail_request:
+                    # If the answer is too short for a procedure question, ask for more details
+                    logger.warning(f"Answer too short for procedure question: {answer}")
                     if not is_english:
-                        answer += "\n\nProgram Studi Sistem Informasi di Undiksha menawarkan kurikulum yang komprehensif yang mencakup mata kuliah dasar dan lanjutan dalam bidang sistem informasi. Program ini memiliki beberapa konsentrasi seperti Manajemen Sistem Informasi, Rekayasa dan Kecerdasan Bisnis, serta Keamanan Siber. Jika Anda memerlukan informasi lebih spesifik tentang aspek tertentu dari program studi ini, silakan tanyakan."
+                        answer += "\n\nApakah Anda ingin saya menjelaskan lebih detail tentang prosedur ini? Silakan beri tahu saya bagian mana yang ingin Anda ketahui lebih lanjut."
                     else:
-                        answer += "\n\nThe Information Systems Program at Undiksha offers a comprehensive curriculum covering both foundational and advanced courses in information systems. The program has several concentrations including Information Systems Management, Business Intelligence and Engineering, and Cyber Security. If you need more specific information about certain aspects of this program, please ask."
+                        answer += "\n\nWould you like me to explain this procedure in more detail? Please let me know which part you would like to know more about."
                 
-            # Check if this is a procedure question but the answer is too short
-            if is_procedure_question(user_input) and len(answer.split()) < 50 and not is_detail_request:
-                # If the answer is too short for a procedure question, ask for more details
-                logger.warning(f"Answer too short for procedure question: {answer}")
-                if not is_english:
-                    answer += "\n\nApakah Anda ingin saya menjelaskan lebih detail tentang prosedur ini? Silakan beri tahu saya bagian mana yang ingin Anda ketahui lebih lanjut."
-                else:
-                    answer += "\n\nWould you like me to explain this procedure in more detail? Please let me know which part you would like to know more about."
-            
-            # If this is a request for more details, make sure the answer is comprehensive
-            if is_detail_request and len(answer.split()) < 100:
-                logger.warning(f"Answer too short for detail request: {answer}")
-                if not is_english:
-                    answer += "\n\nSaya harap penjelasan ini membantu. Jika Anda memerlukan informasi lebih spesifik, silakan tanyakan bagian tertentu yang ingin Anda ketahui lebih dalam."
-                else:
-                    answer += "\n\nI hope this explanation helps. If you need more specific information, please ask about the particular aspect you'd like to know more about."
-        else:
-            logger.warning(f"Unexpected response format: {response}")
-            answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini." if not is_english else "Sorry, I cannot process your question at this time."
-            
-    except Exception as e:
-        logger.error(f"Error generating response: {e}", exc_info=True)
-        # Provide more informative error message
-        if "name 'rag_chain' is not defined" in str(e):
-            answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini." if not is_english else "Sorry, there was an error in the search component. Our technical team is working to resolve this issue."
-        else:
-            answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Silakan coba kembali beberapa saat lagi atau coba pertanyaan lain. Jika masalah berlanjut, silakan hubungi administrator sistem." if not is_english else "Sorry, there was an error processing your question. Please try again later or try a different question. If the problem persists, please contact the system administrator."
-    
-    if show_process:
-        st.success("Jawaban siap! 🚀" if not is_english else "Answer ready! 🚀")
+                # If this is a request for more details, make sure the answer is comprehensive
+                if is_detail_request and len(answer.split()) < 100:
+                    logger.warning(f"Answer too short for detail request: {answer}")
+                    if not is_english:
+                        answer += "\n\nSaya harap penjelasan ini membantu. Jika Anda memerlukan informasi lebih spesifik, silakan tanyakan bagian tertentu yang ingin Anda ketahui lebih dalam."
+                    else:
+                        answer += "\n\nI hope this explanation helps. If you need more specific information, please ask about the particular aspect you'd like to know more about."
+            else:
+                logger.warning(f"Unexpected response format: {response}")
+                answer = "Maaf, saya tidak dapat memproses pertanyaan Anda saat ini." if not is_english else "Sorry, I cannot process your question at this time."
+                
+        except Exception as e:
+            logger.error(f"Error generating response: {e}", exc_info=True)
+            # Provide more informative error message
+            if "name 'rag_chain' is not defined" in str(e):
+                answer = "Maaf, terjadi kesalahan dalam komponen pencarian. Tim teknis kami sedang menyelesaikan masalah ini." if not is_english else "Sorry, there was an error in the search component. Our technical team is working to resolve this issue."
+            else:
+                answer = "Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Silakan coba kembali beberapa saat lagi atau coba pertanyaan lain. Jika masalah berlanjut, silakan hubungi administrator sistem." if not is_english else "Sorry, there was an error processing your question. Please try again later or try a different question. If the problem persists, please contact the system administrator."
         
-    return answer
+        if show_process:
+            st.success("Jawaban siap! 🚀" if not is_english else "Answer ready! 🚀")
+            
+        return answer
+    except Exception as e:
+        # Handle any exceptions that might occur during processing
+        logger.error(f"Unhandled error in generation function: {e}", exc_info=True)
+        is_english = detect_language(user_input) == 'en'
+        return "I'm sorry, I encountered an error while processing your request. Please try again." if is_english else "Maaf, terjadi kesalahan saat memproses permintaan Anda. Silakan coba lagi."
 
 def check_and_refresh_rss_feed():
     """
@@ -834,18 +893,34 @@ def check_and_refresh_rss_feed():
         except Exception as e:
             logger.error(f"Error checking RSS feed refresh time: {e}")
 
+def check_auth(username, password):
+    """Check if username and password match the hardcoded values"""
+    return username == "adminsi" and password == "adminsi"
+
 def main():
     st.set_page_config(
         page_title="Virtual Assistant SI Undiksha",
         page_icon="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSxGdjI58B_NuUd8eAWfRBlVms7f-2e2oI_SA&s",
-        layout="wide"
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
     
-    # Initialize session state for chat history if it doesn't exist
+    # Force light theme
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: #FFFFFF;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # Initialize session states
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
     
-    # Initialize other session state variables for developer mode
+    # Initialize other session states...
     if "dev_mode_embedded_data" not in st.session_state:
         st.session_state.dev_mode_embedded_data = None
     
@@ -879,9 +954,31 @@ def main():
         # Mode selection
         mode = st.radio("Mode", ["User Mode", "Developer Mode"])
         
-        # Developer mode options
+        # Developer mode authentication
         if mode == "Developer Mode":
-            export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
+            if not st.session_state.authenticated:
+                with st.form("auth_form"):
+                    st.subheader("Developer Authentication")
+                    username = st.text_input("Username")
+                    password = st.text_input("Password", type="password")
+                    submit = st.form_submit_button("Login")
+                    
+                    if submit:
+                        if check_auth(username, password):
+                            st.session_state.authenticated = True
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+                
+                # If not authenticated, show user mode
+                mode = "User Mode"
+            
+            # Only show developer options if authenticated
+            if st.session_state.authenticated:
+                export_to_csv = st.checkbox("Export retrieval data to CSV", value=False)
+                if st.button("Logout"):
+                    st.session_state.authenticated = False
+                    st.rerun()
         
         st.text("Universitas Pendidikan Ganesha")
         st.markdown("---")
