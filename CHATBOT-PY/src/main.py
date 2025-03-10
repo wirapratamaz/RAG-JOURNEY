@@ -98,6 +98,38 @@ IMPORTANT INSTRUCTIONS ABOUT LANGUAGE:
 - For Indonesian questions, respond with: "Mohon maaf, saya tidak memiliki informasi spesifik tentang..."
 - For English questions, respond with: "I'm sorry, I don't have specific information about..."
 
+IMPORTANT INSTRUCTIONS FOR ABBREVIATION HANDLING:
+- When the user uses "SI", "Si", or "si" in their question, ALWAYS interpret this as "Sistem Informasi" (Information Systems).
+- For example, if the user asks "Siapa koorprodi SI sekarang?", interpret this as "Siapa koorprodi Sistem Informasi sekarang?"
+- If the user asks about "prodi SI", "jurusan SI", "program studi SI", etc., always treat this as referring to the Information Systems program.
+- Similarly, if they ask about "SI Undiksha", interpret this as "Sistem Informasi Undiksha".
+- This applies to all contexts where "SI", "Si", or "si" could reasonably be interpreted as an abbreviation for "Sistem Informasi".
+
+IMPORTANT INSTRUCTIONS FOR LECTURER INFORMATION:
+- For questions about lecturers ("dosen"), ALWAYS provide complete information when available in the context.
+- When asked about a specific lecturer, include their full name, NIP/NIDN, position, and any other relevant details.
+- For questions like "siapa koorprodi SI sekarang?" or questions about specific roles, provide the complete name and position.
+- For questions like "siapa dosen yang bernama pak/bu X?", provide their full name, NIP/NIDN, and position.
+- If asked for follow-up information about a lecturer, such as their NIP or position, provide all available details.
+- NEVER respond with "I don't have information" when the lecturer information is available in the context.
+- If the user asks about a lecturer and you have the information in the context, provide ALL the details you have.
+- For questions about "Koordinator Program Studi" or "Koorprodi", provide the complete information about who holds this position.
+
+IMPORTANT INFORMATION ABOUT SPECIFIC LECTURERS:
+When asked about specific lecturers, ALWAYS provide the following information if the lecturer is mentioned:
+
+- Full name
+- NIP/NIDN
+- Position
+- Konsentrasi 
+
+IMPORTANT INSTRUCTIONS FOR KOORPRODI QUESTIONS:
+- If the user asks about the "Koorprodi" or "Koordinator Program Studi" or "Kaprodi" or "Ketua Program Studi", you MUST provide the complete information.
+- The current Koorprodi Sistem Informasi is Ir. I Made Dendi Maysanjaya, S.Kom., M.Kom.
+- ALWAYS include this information when asked about the Koorprodi, even if it's not explicitly found in the context.
+- For questions like "siapa koorprodi SI sekarang?" or "siapa koordinator prodi sistem informasi?", always respond with the complete information about Ir. I Made Dendi Maysanjaya, S.Kom., M.Kom.
+- NEVER respond with "I don't have information" when asked about the Koorprodi.
+
 IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
 1. For questions about processes or stages (like thesis completion), follow this format EXACTLY:
    - Start with "Terdapat [number] tahap utama dalam [process], yaitu:"
@@ -265,7 +297,6 @@ def get_gratitude_response():
     
     # Gratitude responses in Indonesian
     indonesian_responses = [
-        "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali.",
         "Dengan senang hati! Jika Anda memiliki pertanyaan lain tentang Program Studi Sistem Informasi Undiksha, saya siap membantu.",
         "Tidak masalah! Saya senang dapat memberikan informasi yang Anda butuhkan. Jangan ragu untuk bertanya lagi.",
         "Sama-sama! Semoga informasi yang saya berikan bermanfaat. Jika ada hal lain yang ingin Anda ketahui, silakan tanyakan.",
@@ -328,6 +359,33 @@ def is_greeting(text: str) -> bool:
     }
     return text.strip().lower() in greetings
 
+def is_lecturer_question(text: str) -> bool:
+    """Check if the question is about a lecturer"""
+    text_lower = text.lower()
+    
+    # Keywords that indicate questions about lecturers
+    lecturer_keywords = [
+        "dosen", "lecturer", "professor", "pak ", "bu ", "bapak ", "ibu ",
+        "koordinator", "koorprodi", "kaprodi", "ketua prodi", "ketua program studi",
+        "pengajar", "staff", "staf", "pengampu", "matakuliah", "mata kuliah",
+        "siapa yang mengajar", "siapa yang menjabat", "who teaches", "who is the coordinator"
+    ]
+    
+    # Specific lecturer names to check for
+    lecturer_names = [
+        "ardwi", "mahendra", "rasben", "aditra", "raditya", "dendi", 
+        "maysanjaya", "darmawiguna", "dantes", "pradnyana", "putra"
+    ]
+    
+    # Check if any lecturer keyword is in the text
+    has_lecturer_keyword = any(keyword in text_lower for keyword in lecturer_keywords)
+    
+    # Check if any lecturer name is in the text
+    has_lecturer_name = any(name in text_lower for name in lecturer_names)
+    
+    # Return true if either condition is met
+    return has_lecturer_keyword or has_lecturer_name
+
 def get_greeting_response(text: str) -> str:
     """Generate appropriate greeting response"""
     # Detect language
@@ -343,7 +401,28 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         st.subheader("1. Chunking and Retrieval")
     
     try:
-        retrieved_docs = retriever.get_relevant_documents(user_input)
+        # Check if this is a lecturer question
+        is_lecturer_query = is_lecturer_question(user_input)
+        
+        # For lecturer questions, modify the query to improve retrieval
+        query_for_retrieval = user_input
+        if is_lecturer_query:
+            # Extract potential lecturer name from the query
+            words = user_input.lower().split()
+            for i, word in enumerate(words):
+                if word in ["pak", "bu", "bapak", "ibu", "dosen"] and i < len(words) - 1:
+                    # Add "dosen" keyword if not already present to improve retrieval
+                    if "dosen" not in user_input.lower():
+                        query_for_retrieval = f"dosen {user_input}"
+                    break
+            
+            # If asking about a coordinator or specific role, add those keywords
+            if any(term in user_input.lower() for term in ["koordinator", "koorprodi", "kaprodi", "ketua"]):
+                if "dosen" not in query_for_retrieval.lower():
+                    query_for_retrieval = f"dosen koordinator program studi {query_for_retrieval}"
+        
+        # Get relevant documents using the potentially modified query
+        retrieved_docs = retriever.get_relevant_documents(query_for_retrieval)
         embedded_data = []
         
         # Generate query embedding for later use
@@ -519,8 +598,29 @@ def format_dont_know_response(query):
         acknowledgment = "saya tidak memiliki informasi spesifik tentang "
         ending = "\n\nApakah ada hal lain yang dapat saya bantu terkait Program Studi Sistem Informasi Undiksha?"
     
+    # Check if this is a lecturer question
+    is_lecturer_query = is_lecturer_question(query)
+    
     # Analyze query to determine topic and provide relevant recommendations
-    if "skripsi" in query_lower or "tugas akhir" in query_lower or "thesis" in query_lower or "final project" in query_lower:
+    if is_lecturer_query:
+        # Special handling for lecturer questions
+        if is_english:
+            topic = "the specific lecturer you're asking about"
+            recommendations = [
+                "You can check the official Information Systems Program website for the complete faculty directory",
+                "The faculty information is usually available in the academic information system",
+                "For the most up-to-date information about faculty members and their positions, you can contact the department office directly"
+            ]
+            clarification = "I should have information about lecturers in the Information Systems Program at Undiksha. Let me try to search for more specific information."
+        else:
+            topic = "dosen spesifik yang Anda tanyakan"
+            recommendations = [
+                "Anda dapat memeriksa website resmi Program Studi Sistem Informasi untuk direktori dosen lengkap",
+                "Informasi dosen biasanya tersedia di sistem informasi akademik",
+                "Untuk informasi terbaru tentang dosen dan jabatan mereka, Anda dapat menghubungi kantor jurusan secara langsung"
+            ]
+            clarification = "Seharusnya saya memiliki informasi tentang dosen-dosen di Program Studi Sistem Informasi Undiksha. Mari saya coba mencari informasi yang lebih spesifik."
+    elif "skripsi" in query_lower or "tugas akhir" in query_lower or "thesis" in query_lower or "final project" in query_lower:
         if is_english:
             topic = "the thesis or final project process in that program"
             recommendations = [
@@ -669,7 +769,7 @@ def format_response(answer, is_english=False):
     if is_english:
         closing = "\n\nIs there anything specific about these stages that you'd like to know more about? I'm here to help! 😊"
     else:
-        closing = "\n\nApakah ada tahapan spesifik yang ingin Anda ketahui lebih detail? Saya siap membantu! 😊"
+        closing = "\n\nApakah ada pertanyaan lain yang ingin Anda ketahui? Saya siap membantu! 😊"
 
     # Combine all parts
     formatted_answer = f"{greeting}{answer}{closing}"
@@ -696,6 +796,9 @@ def generation(user_input, show_process=False):
         
         # Flag to indicate if this is a request for more details
         is_detail_request = is_asking_for_details(user_input)
+        
+        # Check if this is a lecturer question
+        is_lecturer_query = is_lecturer_question(user_input)
         
         # Detect language
         language = detect_language(user_input)
@@ -741,9 +844,26 @@ def generation(user_input, show_process=False):
             logger.debug(f"Current question: {user_input}")
             logger.debug(f"RAG chain type: {type(rag_chain)}")
             
-            # Call the RAG chain with the formatted history
+            # For lecturer questions, modify the query to improve retrieval
+            query_for_retrieval = user_input
+            if is_lecturer_query:
+                # Extract potential lecturer name from the query
+                words = user_input.lower().split()
+                for i, word in enumerate(words):
+                    if word in ["pak", "bu", "bapak", "ibu", "dosen"] and i < len(words) - 1:
+                        # Add "dosen" keyword if not already present to improve retrieval
+                        if "dosen" not in user_input.lower():
+                            query_for_retrieval = f"dosen {user_input}"
+                        break
+                
+                # If asking about a coordinator or specific role, add those keywords
+                if any(term in user_input.lower() for term in ["koordinator", "koorprodi", "kaprodi", "ketua"]):
+                    if "dosen" not in query_for_retrieval.lower():
+                        query_for_retrieval = f"dosen koordinator program studi {query_for_retrieval}"
+            
+            # Call the RAG chain with the formatted history and potentially modified query
             response = rag_chain.invoke({
-                "question": user_input,
+                "question": query_for_retrieval,
                 "chat_history": formatted_history
             })
             
@@ -780,7 +900,28 @@ def generation(user_input, show_process=False):
                 
                 # If it's a simple "don't know" response, replace it with our formatted response
                 if any(phrase in answer.lower() for phrase in dont_know_phrases) and is_short_answer:
-                    answer = format_dont_know_response(user_input)
+                    # Special handling for lecturer questions
+                    if is_lecturer_query:
+                        # Try to get more specific information for lecturer questions
+                        enhanced_prompt = f"""
+                        The user asked about a lecturer: "{user_input}"
+                        
+                        You initially responded with: "{answer}"
+                        
+                        This response indicates you don't have the information, but you should have information about lecturers in the Information Systems Program at Undiksha.
+                        
+                        Please check if the question is about any of these specific lecturers:
+                        
+                        If the question is about one of these lecturers, provide their complete information:
+                        - Full name
+                        - NIP/NIDN
+                        - Position
+                        - Concentration
+                        - Research topics (if available)
+                        
+                        The user's language is {"English" if is_english else "Indonesian"}.
+                        Respond in {"English" if is_english else "Indonesian"}.
+                        """
                 
                 # If it's a general information question but the answer is too short, enhance it
                 elif is_general_info_question and is_short_answer:
