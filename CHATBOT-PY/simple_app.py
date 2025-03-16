@@ -24,11 +24,20 @@ def main():
         layout="wide"
     )
     
-    # Force light theme
+    # Theme-aware CSS that respects light/dark mode
     st.markdown("""
         <style>
-        .stApp {
-            background-color: #FFFFFF;
+        /* Custom styling for chat elements that respects theme */
+        .chat-message {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+        }
+        
+        /* Custom styling for user input area */
+        .stTextInput > div > div > input {
+            border-radius: 20px;
         }
         </style>
     """, unsafe_allow_html=True)

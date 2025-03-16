@@ -5,6 +5,12 @@ secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
 font = "sans serif"
 
+[theme.dark]
+primaryColor = "#FF4B4B"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1E2028"
+textColor = "#FAFAFA"
+
 [server]
 enableCORS = false
 enableXsrfProtection = true

@@ -1046,11 +1046,26 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Force light theme
+    # Theme-aware CSS that respects light/dark mode
     st.markdown("""
         <style>
-        .stApp {
-            background-color: #FFFFFF;
+        /* Preserve default Streamlit theme background values based on current theme */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        
+        /* Custom styling for chat elements that respects theme */
+        .chat-message {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+        }
+        
+        /* Custom styling for user input area that works in both themes */
+        .stTextInput > div > div > input {
+            border-radius: 20px;
         }
         </style>
     """, unsafe_allow_html=True)
