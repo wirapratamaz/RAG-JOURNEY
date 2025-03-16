@@ -42,8 +42,4 @@
    - Local URL: `http://localhost:8501`
    - Network URL: `http://<your-local-ip>:8501`
 
-## Usage
-
-The assistant will now utilize the enhanced Crawl4AI crawler to fetch and process information from the specified website, providing more accurate and comprehensive responses.
-
 ---
