@@ -435,13 +435,86 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
                     query_for_retrieval = f"dosen koordinator program studi {query_for_retrieval}"
         
         # Get relevant documents using the potentially modified query
-        retrieved_docs = retriever.get_relevant_documents(query_for_retrieval)
+        # Initially fetch more documents (e.g., 20) to account for duplicates
+        # Use search_kwargs to set the number of results instead of directly setting k
+        retrieved_docs = retriever.get_relevant_documents(
+            query_for_retrieval, 
+            search_kwargs={"k": 20}
+        )
+        total_retrieved = len(retrieved_docs)
+        
+        # Deduplicate chunks and keep track of which ones were removed
+        seen_chunks = set()
+        unique_docs = []
+        duplicate_count = 0
+        removed_docs = []
+        
+        for doc in retrieved_docs:
+            # Create a simplified version of the chunk for deduplication
+            # Focus on the first 100 chars as a chunk signature
+            content = doc.page_content.strip()
+            chunk_signature = content[:100]
+            
+            # Skip documents that contain RSS feed markers (usually contain "appeared first on")
+            if "appeared first on" in content.lower():
+                removed_docs.append(doc)
+                duplicate_count += 1
+                continue
+                
+            # Skip duplicate chunks based on their signature
+            if chunk_signature in seen_chunks:
+                removed_docs.append(doc)
+                duplicate_count += 1
+                continue
+                
+            seen_chunks.add(chunk_signature)
+            unique_docs.append(doc)
+        
+        # Standard number of chunks to show
+        STANDARD_CHUNK_COUNT = 12
+        
+        # If we don't have enough unique chunks, process and add more
+        if len(unique_docs) < STANDARD_CHUNK_COUNT:
+            # Try to get more chunks to reach the standard count
+            # Use search_kwargs to set the number of results
+            more_needed = STANDARD_CHUNK_COUNT - len(unique_docs)
+            additional_k = total_retrieved + more_needed + 5  # Add a buffer
+            
+            # Get more documents
+            more_docs = retriever.get_relevant_documents(
+                query_for_retrieval, 
+                search_kwargs={"k": additional_k}
+            )
+            
+            # Process only the new documents (skip those we've already seen)
+            for doc in more_docs[total_retrieved:]:
+                content = doc.page_content.strip()
+                chunk_signature = content[:100]
+                
+                # Skip RSS feeds and duplicates
+                if "appeared first on" in content.lower() or chunk_signature in seen_chunks:
+                    continue
+                
+                seen_chunks.add(chunk_signature)
+                unique_docs.append(doc)
+                
+                # Stop once we have enough
+                if len(unique_docs) >= STANDARD_CHUNK_COUNT:
+                    break
+        
+        # Trim to standard count if we have more
+        unique_docs = unique_docs[:STANDARD_CHUNK_COUNT]
+        
+        # Store the total number of docs for display purposes
+        total_initial_docs = total_retrieved
+        
+        # Use the deduplicated docs to create embedded data
         embedded_data = []
         
         # Generate query embedding for later use
         query_embedding = model.encode(user_input)
         
-        for doc in retrieved_docs:
+        for doc in unique_docs:
             chunk = doc.page_content
             relevance_score = calculate_relevance_scores(chunk, user_input)
             embedded_data.append((chunk, relevance_score))
@@ -451,7 +524,7 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         
         if show_process and st.session_state.processing_new_question:
             # Display the embedding process only when processing a new question
-            display_embedding_process(embedded_data, user_input, query_embedding)
+            display_embedding_process(embedded_data, user_input, query_embedding, total_initial_docs)
             
             # Export to CSV if requested
             if export_to_csv:
@@ -473,9 +546,10 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     except Exception as e:
         if show_process:
             st.warning(f"An error occurred during retrieval: {e}")
+        logger.error(f"Error in chunking_and_retrieval: {e}", exc_info=True)
         return [], None
 
-def display_embedding_process(embedded_data, query=None, query_embedding=None):
+def display_embedding_process(embedded_data, query=None, query_embedding=None, total_before_dedup=None):
     st.subheader("Embedding Process")
     
     # Function to clean chunks by removing "Jawaban: " prefix
@@ -490,6 +564,18 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         chunk = re.sub(r'^SI\s*\?', 'SI', chunk)
         chunk = re.sub(r'^Program\s+Studi\s*\?', 'Program Studi', chunk)
         chunk = re.sub(r'^\s*\?\s*', '', chunk)  # Remove leading question marks
+        
+        # Remove "Title:" prefix that often appears in RSS feeds
+        chunk = re.sub(r'^Title:\s*', '', chunk)
+        
+        # Remove HTML tags that might appear in RSS feeds
+        chunk = re.sub(r'<.*?>', '', chunk)
+        
+        # Remove "Content:" prefix
+        chunk = re.sub(r'Content:\s*', '', chunk)
+        
+        # Remove common RSS feed footer pattern
+        chunk = re.sub(r'The post .* appeared first on .*\.', '', chunk)
         
         return chunk.strip()
     
@@ -517,6 +603,17 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         
         # Display the retrieved chunks with full vector representations
         st.subheader("Retrieved Chunks")
+
+            # Show deduplication stats if available
+    if total_before_dedup is not None:
+        total_after_dedup = len(embedded_data)
+        
+        if total_before_dedup > total_after_dedup:
+            # We processed more chunks but are showing the standard number
+            st.info(f"🔍 Retrieved and processed {total_before_dedup} chunks, showing {total_after_dedup} unique chunks without duplicates.")
+        else:
+            # No duplicates were found
+            st.info(f"🔍 Retrieved {total_before_dedup} chunks with no duplicates found.")
         
         # Create data for the chunks table with full vectors
         chunks_data = []
@@ -551,7 +648,7 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         st.markdown("---")
     
     # Ensure this expander is not nested
-    with st.expander("Detail Embedding", expanded=True):
+    with st.expander("Detail Chunks", expanded=True):
         # Add a filter for top chunks
         col1, col2 = st.columns([1, 3])
         with col1:
@@ -796,18 +893,11 @@ def format_response(answer, is_english=False):
     """
     # Add greeting based on the content
     if "skripsi" in answer.lower() or "thesis" in answer.lower():
-        greeting = "Baik, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
+        greeting = "Salam Harmoni, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
     else:
-        greeting = "Baik, " if not is_english else "Alright, "
-
-    # Add conversation markers
-    if is_english:
-        closing = "\n\nIs there anything specific about these stages that you'd like to know more about? I'm here to help! 😊"
-    else:
-        closing = "\n\nApakah ada pertanyaan lain yang ingin Anda ketahui? Saya siap membantu! 😊"
-
+        greeting = "Salam Harmoni, " if not is_english else "Alright, "
     # Combine all parts
-    formatted_answer = f"{greeting}{answer}{closing}"
+    formatted_answer = f"{greeting}{answer}"
     
     return formatted_answer
 
@@ -1200,10 +1290,18 @@ def main():
                         
         # Display the embedding process info (if available)
         if st.session_state.dev_mode_embedded_data is not None and not st.session_state.processing_new_question:
+            # Get the relevant documents using the proper search_kwargs
+            relevant_docs = retriever.get_relevant_documents(
+                st.session_state.dev_mode_query, 
+                search_kwargs={"k": 20}
+            )
+            total_docs = len(relevant_docs)
+            
             display_embedding_process(
                 st.session_state.dev_mode_embedded_data,
                 st.session_state.dev_mode_query,
-                st.session_state.dev_mode_query_embedding
+                st.session_state.dev_mode_query_embedding,
+                total_docs
             )
             
             # If we exported to CSV, show download button
