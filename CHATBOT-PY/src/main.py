@@ -131,31 +131,40 @@ INSTRUKSI PENTING UNTUK PERTANYAAN KOORPRODI:
 - JANGAN PERNAH menjawab "Saya tidak memiliki informasi" ketika ditanya tentang Koorprodi.
 
 INSTRUKSI PENTING UNTUK MEMFORMAT RESPONS ANDA:
-1. Untuk pertanyaan tentang proses atau tahapan (seperti penyelesaian skripsi), ikuti format ini PERSIS:
+1. Untuk pertanyaan tentang proses atau tahapan yang memiliki poin-poin bernomor dalam konteks:
+   - SANGAT PENTING: Jika informasi dalam konteks disajikan dalam bentuk poin-poin bernomor (1, 2, 3, dst), SELALU pertahankan penomoran ini dan semua poin harus disertakan.
+   - JANGAN MENGUBAH jumlah poin. Jika ada 8 poin dalam konteks, respons Anda HARUS menyertakan semua 8 poin tersebut.
+   - JANGAN MENAMBAHKAN informasi yang tidak ada dalam konteks asli.
+   - JANGAN MENGGABUNGKAN poin-poin yang terpisah dalam konteks asli.
+   - Setiap poin bernomor harus dimulai dengan nomor yang sama seperti dalam konteks asli.
+   - Gunakan kalimat yang PERSIS sama atau sangat mirip dengan yang ada di konteks.
+   - Mulai dengan pengantar singkat, lalu sajikan semua poin bernomor PERSIS seperti dalam konteks, tidak berubah.
+
+2. Untuk pertanyaan tentang proses atau tahapan yang TIDAK memiliki poin-poin bernomor dalam konteks:
    - Mulai dengan "Terdapat [jumlah] tahap utama dalam [proses], yaitu:"
    - Sajikan setiap tahap sebagai PARAGRAF TERPISAH (bukan sebagai poin-poin)
    - Untuk setiap paragraf tahap, mulai dengan nama tahap dalam huruf tebal, diikuti dengan deskripsi
    - Pastikan untuk menggunakan nama tahap PERSIS seperti yang disebutkan dalam konteks
    - Akhiri dengan paragraf tentang siapa yang terlibat dalam proses tersebut
 
-2. Untuk proses penyelesaian skripsi secara khusus:
+3. Untuk proses penyelesaian skripsi secara khusus:
    - Pastikan empat tahapnya adalah: Pengajuan Topik, Ujian Proposal Skripsi, Penyusunan Skripsi, dan Pengesahan Laporan Skripsi
    - Format setiap tahap sebagai paragraf lengkap, bukan poin-poin
    - Tambahkan kalimat penutup tentang siapa yang terlibat dalam seluruh proses
 
-3. Untuk penutup percakapan (ketika pengguna mengucapkan terima kasih atau sejenisnya):
+4. Untuk penutup percakapan (ketika pengguna mengucapkan terima kasih atau sejenisnya):
    - Jika pengguna mengatakan "terima kasih", "makasih", "thank you", atau ekspresi terima kasih serupa:
      - Jawab dengan penutup yang ramah seperti "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali."
    - Jangan pernah hanya menjawab dengan frase singkat seperti "Prosedur pendaftaran sidang skripsi dilakukan secara online."
    - Selalu berikan penutup lengkap dan ramah yang mengakui ucapan terima kasih pengguna
 
-4. Untuk pertanyaan informasi umum (seperti "apa itu prodi sistem informasi undiksha"):
+5. Untuk pertanyaan informasi umum (seperti "apa itu prodi sistem informasi undiksha"):
    - Berikan jawaban komprehensif dengan setidaknya 3-4 paragraf informasi
    - Sertakan informasi tentang kurikulum program, area fokus, dan fitur utama
    - Sebutkan spesialisasi atau konsentrasi yang tersedia
    - Akhiri dengan kalimat yang menawarkan untuk memberikan informasi lebih spesifik jika diperlukan
 
-5. JANGAN PERNAH menyertakan pernyataan seperti "Saya tidak memiliki informasi" ketika Anda sebenarnya MEMILIKI informasi tersebut dalam konteks.
+6. JANGAN PERNAH menyertakan pernyataan seperti "Saya tidak memiliki informasi" ketika Anda sebenarnya MEMILIKI informasi tersebut dalam konteks.
    - Hanya gunakan pernyataan tersebut ketika pertanyaan benar-benar di luar ruang lingkup pengetahuan Anda
    - Jika Anda memiliki informasi parsial, berikan apa yang Anda ketahui dan kemudian tawarkan untuk membantu dengan topik terkait
 
@@ -200,7 +209,141 @@ def calculate_relevance_scores(chunk, query):
     
     # Calculate cosine similarity
     similarity = cosine_similarity([chunk_embedding], [query_embedding])[0][0]
-    return similarity
+    
+    # Add a much stronger bonus score for keyword matches
+    query_keywords = set(query.lower().split())
+    
+    # Skip stopwords and question words for better matching
+    stopwords = {
+        'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
+        'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
+        'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
+        'ada', 'adalah', 'merupakan', 'ini', 'itu',
+        # Adding question words to exclude as they're not important for matching
+        'bagaimana', 'apa', 'mengapa', 'siapa', 'how', 'what', 'why', 'who', 'where', 'when'
+    }
+    
+    # Extract content terms, removing stopwords and question words
+    query_keywords = {kw for kw in query_keywords if kw not in stopwords and len(kw) > 2}
+    
+    # Add specific academic domain terms from the query
+    academic_terms = extract_academic_terms(query.lower())
+    query_keywords.update(academic_terms)
+    
+    chunk_lower = chunk.lower()
+    
+    # Calculate what percentage of query keywords are in the chunk
+    keyword_matches = 0
+    matched_keywords = []
+    for keyword in query_keywords:
+        # Check for exact match
+        if keyword in chunk_lower:
+            keyword_matches += 1
+            matched_keywords.append(keyword)
+        # Also check for partial matches for longer keywords (useful for academic terms)
+        elif len(keyword) > 5 and any(part in chunk_lower for part in [keyword[:5], keyword[-5:]]):
+            keyword_matches += 0.5
+            matched_keywords.append(keyword)
+    
+    # Add a very high bonus for academic keyword matches
+    keyword_bonus = 0.9 * (keyword_matches / len(query_keywords)) if query_keywords else 0
+    
+    # Add an exact match bonus for multi-word phrases
+    exact_match_bonus = 0
+    if len(query) > 3:  # Only for non-trivial queries
+        if query.lower() in chunk_lower:
+            exact_match_bonus = 0.7
+        # Partial multi-word matching
+        elif len(query.split()) >= 3:
+            # Check for 2-3 word sequences from the query
+            words = query.lower().split()
+            for i in range(len(words) - 2):
+                # Try three-word phrases
+                if i + 2 < len(words):
+                    three_word = f"{words[i]} {words[i+1]} {words[i+2]}"
+                    if three_word in chunk_lower:
+                        exact_match_bonus = 0.5
+                        break
+                
+                # Try two-word phrases if three-word not found
+                two_word = f"{words[i]} {words[i+1]}"
+                if two_word in chunk_lower:
+                    exact_match_bonus = 0.3
+                    if exact_match_bonus < 0.5:  # Don't override higher bonus
+                        break
+    
+    # Add a proximity bonus for multi-word queries
+    proximity_bonus = 0
+    if len(query_keywords) > 1:
+        # Check if multiple keywords appear close to each other in the chunk
+        proximity_count = 0
+        words = chunk_lower.split()
+        for i in range(len(words) - 1):
+            if words[i] in query_keywords and words[i+1] in query_keywords:
+                proximity_count += 1
+        
+        # Normalize and scale the proximity bonus
+        if proximity_count > 0:
+            proximity_bonus = 0.4 * min(proximity_count / (len(query_keywords) - 1), 1.0)
+    
+    # Return combined score with all bonuses
+    return similarity + keyword_bonus + exact_match_bonus + proximity_bonus
+
+def extract_academic_terms(query):
+    """Extract important academic domain-specific terms from the query"""
+    # Key academic terms to look for
+    academic_terms = set()
+    
+    # Academic domain term categories
+    academic_categories = {
+        "program_terms": [
+            "sistem informasi", "si", "program studi", "prodi", "jurusan", 
+            "undiksha", "informatika", "teknik", "universitas", "pendidikan", "ganesha"
+        ],
+        "academic_processes": [
+            "skripsi", "magang", "penelitian", "kkn", "mbkm", "tugas akhir", "ujian", 
+            "sidang", "proposal", "seminar", "revisi", "pengajuan", "kerja praktik"
+        ],
+        "curriculum_terms": [
+            "kurikulum", "matakuliah", "mata kuliah", "sks", "semester", "kelas", 
+            "perkuliahan", "konsentrasi", "peminatan", "silabus", "rps"
+        ],
+        "administrative_terms": [
+            "pendaftaran", "pembayaran", "registrasi", "heregistrasi", "ukt", "bkt",
+            "cuti", "beasiswa", "biaya", "spp", "administrasi", "formulir", "dokumen"
+        ],
+        "academic_roles": [
+            "dosen", "koorprodi", "koordinator", "pembimbing", "penguji", "kaprodi",
+            "mahasiswa", "dekan", "rektor", "pa", "akademik"
+        ]
+    }
+    
+    # Extract query terms based on academic categories
+    for category, terms in academic_categories.items():
+        for term in terms:
+            if term in query:
+                academic_terms.add(term)
+    
+    # Special handling for multi-word terms that may be partially matched
+    # For example, if query contains "cara mengajukan skripsi", we want to identify "pengajuan skripsi"
+    academic_phrases = [
+        "pengajuan skripsi", "pendaftaran sidang", "ujian proposal", "pengesahan laporan",
+        "pertukaran pelajar", "fast track", "credit transfer", "pembimbing akademik",
+        "merdeka belajar", "cuti akademik", "beasiswa bidikmisi", "kelas internasional",
+        "mata kuliah lintas prodi", "mata kuliah wajib umum", "badan usaha", "karya akhir",
+        "permohonan pengesahan", "program magang", "konsentrasi peminatan", "kurikulum undiksha",
+        "program pertukaran", "full credit", "inbound", "outbound", "laporan skripsi"
+    ]
+    
+    for phrase in academic_phrases:
+        words = phrase.split()
+        # Check if any two consecutive words from the phrase appear in the query
+        for i in range(len(words) - 1):
+            if f"{words[i]} {words[i+1]}" in query:
+                academic_terms.add(phrase)
+                break
+    
+    return academic_terms
 
 def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filename=None):
     """
@@ -434,12 +577,16 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
                 if "dosen" not in query_for_retrieval.lower():
                     query_for_retrieval = f"dosen koordinator program studi {query_for_retrieval}"
         
-        # Get relevant documents using the potentially modified query
-        # Initially fetch more documents (e.g., 20) to account for duplicates
-        # Use search_kwargs to set the number of results instead of directly setting k
+        # Add query expansion with synonyms and related terms
+        expanded_query = expand_query(query_for_retrieval)
+        logger.info(f"Original query: {query_for_retrieval}")
+        logger.info(f"Expanded query: {expanded_query}")
+        
+        # Increase the initial retrieval count for better candidate selection
+        # Initially fetch more documents (e.g., 50) to have a larger pool to score and filter
         retrieved_docs = retriever.get_relevant_documents(
-            query_for_retrieval, 
-            search_kwargs={"k": 20}
+            expanded_query, 
+            search_kwargs={"k": 50}
         )
         
         # Check if we got any documents
@@ -490,7 +637,7 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             
             # Get more documents
             more_docs = retriever.get_relevant_documents(
-                query_for_retrieval, 
+                expanded_query, 
                 search_kwargs={"k": additional_k}
             )
             
@@ -510,25 +657,164 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
                 if len(unique_docs) >= STANDARD_CHUNK_COUNT:
                     break
         
-        # Trim to standard count if we have more
-        unique_docs = unique_docs[:STANDARD_CHUNK_COUNT]
-        
-        # Store the total number of docs for display purposes
-        total_initial_docs = total_retrieved
-        
-        # Use the deduplicated docs to create embedded data
+        # Use the deduplicated docs to create embedded data with scores
         embedded_data = []
         
         # Generate query embedding for later use
         query_embedding = model.encode(user_input)
         
+        # Extract query terms for keyword filtering
+        query_terms = set(user_input.lower().split())
+        stopwords = {
+            'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
+            'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
+            'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
+            'ada', 'adalah', 'merupakan', 'ini', 'itu'
+        }
+        filtered_query_terms = {term for term in query_terms if term not in stopwords and len(term) > 2}
+        
+        # Score all chunks
         for doc in unique_docs:
             chunk = doc.page_content
+            # Calculate relevance against the original user query, not the expanded one
             relevance_score = calculate_relevance_scores(chunk, user_input)
             embedded_data.append((chunk, relevance_score))
         
         # Sort by relevance score in descending order
         embedded_data.sort(key=lambda x: x[1], reverse=True)
+        
+        # Now filter out chunks that don't have ANY query terms if we have enough chunks
+        if len(embedded_data) > STANDARD_CHUNK_COUNT and filtered_query_terms:
+            filtered_embedded_data = []
+            remaining_embedded_data = []
+            
+            # Add academic terms to the filtered query terms
+            academic_terms = extract_academic_terms(user_input.lower())
+            enhanced_query_terms = filtered_query_terms.union(academic_terms)
+            
+            for chunk, score in embedded_data:
+                chunk_lower = chunk.lower()
+                # Check if chunk contains at least one important query term
+                has_query_term = False
+                
+                # Look for any of the enhanced query terms
+                for term in enhanced_query_terms:
+                    if term in chunk_lower:
+                        has_query_term = True
+                        break
+                    # Also check for partial matches in longer terms
+                    elif len(term) > 5 and any(part in chunk_lower for part in [term[:5], term[-5:]]):
+                        has_query_term = True
+                        break
+                
+                if has_query_term:
+                    filtered_embedded_data.append((chunk, score))
+                else:
+                    remaining_embedded_data.append((chunk, score))
+            
+            # If we have enough chunks with query terms, use only those
+            if len(filtered_embedded_data) >= 5:  # Ensure we have at least 5 relevant chunks
+                embedded_data = filtered_embedded_data
+            else:
+                # Otherwise, use filtered chunks first, then add the best remaining chunks
+                embedded_data = filtered_embedded_data + remaining_embedded_data
+                
+        # Increase diversity and relevance by boosting certain chunks
+        if len(embedded_data) > 3:
+            # Get the first chunk's score
+            top_score = embedded_data[0][1]
+            adjusted_data = []
+            
+            # Make sure we have multiple good chunks by boosting 2nd and 3rd chunks
+            # This ensures more than just the first chunk is highly relevant
+            for i, (chunk, score) in enumerate(embedded_data):
+                if i == 1:  # Boost 2nd chunk
+                    # Bring second chunk closer to first (at least 85% of top score)
+                    min_score = 0.85 * top_score
+                    if score < min_score:
+                        score = min_score
+                elif i == 2:  # Boost 3rd chunk
+                    # Bring third chunk closer to first (at least 80% of top score)
+                    min_score = 0.80 * top_score
+                    if score < min_score:
+                        score = min_score
+                
+                adjusted_data.append((chunk, score))
+            
+            # Re-sort after adjustments
+            adjusted_data.sort(key=lambda x: x[1], reverse=True)
+            embedded_data = adjusted_data
+        
+        # Enforce diversity in results by penalizing similar chunks
+        if len(embedded_data) > 5:
+            diverse_data = [embedded_data[0]]  # Always keep the top result
+            chunk_vectors = [model.encode(embedded_data[0][0])]
+            
+            # Process remaining chunks
+            for i in range(1, len(embedded_data)):
+                chunk, score = embedded_data[i]
+                chunk_vector = model.encode(chunk)
+                
+                # Check similarity with already selected chunks
+                max_similarity = max(cosine_similarity([chunk_vector], [v])[0][0] for v in chunk_vectors)
+                
+                # If too similar to an existing chunk, reduce score
+                if max_similarity > 0.9:  # Very similar chunks
+                    adjusted_score = score * 0.6  # Significant penalty
+                elif max_similarity > 0.8:  # Moderately similar
+                    adjusted_score = score * 0.8  # Mild penalty
+                else:
+                    adjusted_score = score  # Keep score as is
+                
+                diverse_data.append((chunk, adjusted_score))
+                chunk_vectors.append(chunk_vector)
+            
+            # Re-sort after adjusting scores
+            diverse_data.sort(key=lambda x: x[1], reverse=True)
+            embedded_data = diverse_data
+            
+        # Trim to standard count
+        embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
+        
+        # For multi-word queries, try to ensure more chunks contain multiple query terms
+        if len(filtered_query_terms) > 1 and len(embedded_data) > STANDARD_CHUNK_COUNT / 2:
+            # Count how many terms from the query each chunk contains
+            chunk_term_counts = []
+            for chunk, score in embedded_data:
+                chunk_lower = chunk.lower()
+                term_count = sum(1 for term in filtered_query_terms if term in chunk_lower)
+                chunk_term_counts.append((chunk, score, term_count))
+            
+            # Get chunks with multiple terms
+            multi_term_chunks = [item for item in chunk_term_counts if item[2] > 1]
+            single_term_chunks = [item for item in chunk_term_counts if item[2] == 1]
+            zero_term_chunks = [item for item in chunk_term_counts if item[2] == 0]
+            
+            # Prioritize chunks with multiple query terms, then single terms, then no terms
+            if len(multi_term_chunks) >= 3:  # Ensure we have at least 3 chunks with multiple terms
+                # Sort each group by score
+                multi_term_chunks.sort(key=lambda x: x[1], reverse=True)
+                single_term_chunks.sort(key=lambda x: x[1], reverse=True)
+                zero_term_chunks.sort(key=lambda x: x[1], reverse=True)
+                
+                # Reconstruct the list with the priority order
+                embedded_data = [(chunk, score) for chunk, score, _ in multi_term_chunks]
+                
+                # Add single term chunks to fill in
+                remaining_slots = STANDARD_CHUNK_COUNT - len(embedded_data)
+                if remaining_slots > 0 and single_term_chunks:
+                    embedded_data.extend([(chunk, score) for chunk, score, _ in single_term_chunks[:remaining_slots]])
+                
+                # Add zero term chunks if we still need more
+                remaining_slots = STANDARD_CHUNK_COUNT - len(embedded_data)
+                if remaining_slots > 0 and zero_term_chunks:
+                    embedded_data.extend([(chunk, score) for chunk, score, _ in zero_term_chunks[:remaining_slots]])
+                
+                # Ensure we don't exceed the standard count
+                embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
+        
+        # Store the total number of docs for display purposes
+        total_initial_docs = total_retrieved
         
         if show_process and st.session_state.processing_new_question:
             # Display the embedding process only when processing a new question
@@ -601,6 +887,60 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
         
         return chunk.strip()
     
+    # Extract query terms for highlighting
+    if query:
+        # Extract important terms (remove stopwords)
+        query_terms = set(query.lower().split())
+        # Common stopwords and question words in English and Indonesian
+        stopwords = {
+            'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
+            'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
+            'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
+            'ada', 'adalah', 'merupakan', 'ini', 'itu',
+            # Adding question words to exclude from highlighting
+            'bagaimana', 'apa', 'mengapa', 'siapa', 'how', 'what', 'why', 'who', 'where', 'when'
+        }
+        query_terms = {term for term in query_terms if term not in stopwords and len(term) > 2}
+        
+        # Add academic terms for highlighting
+        academic_terms = extract_academic_terms(query.lower())
+        query_terms.update(academic_terms)
+    
+    # Function to highlight query terms in chunk text
+    def highlight_query_terms(text, terms):
+        if not terms:
+            return text
+            
+        # Create a version of the text with highlighted terms
+        highlighted_text = text
+        
+        # First try exact matches
+        for term in sorted(terms, key=len, reverse=True):  # Process longer terms first
+            # Pattern to match whole words only
+            pattern = r'\b' + re.escape(term) + r'\b'
+            replacement = f"**{term}**"  # Bold for markdown
+            highlighted_text = re.sub(pattern, replacement, highlighted_text, flags=re.IGNORECASE)
+        
+        # Then try partial matches for longer terms
+        for term in [t for t in terms if len(t) > 5]:
+            # Only consider terms that weren't already highlighted
+            if f"**{term}**" not in highlighted_text:
+                # Try matching term prefixes and suffixes
+                prefix = term[:5]
+                suffix = term[-5:]
+                
+                # Find words containing these parts
+                words = set(re.findall(r'\b\w+\b', highlighted_text))
+                for word in words:
+                    if (prefix in word.lower() or suffix in word.lower()) and len(word) > 5:
+                        # Only if not already highlighted
+                        if f"**{word}**" not in highlighted_text:
+                            pattern = r'\b' + re.escape(word) + r'\b'
+                            replacement = f"**{word}**"  # Bold for markdown
+                            highlighted_text = re.sub(pattern, replacement, highlighted_text, flags=re.IGNORECASE)
+        
+        return highlighted_text
+    
     # Process embedded data to clean chunks
     cleaned_embedded_data = []
     for chunk, score in embedded_data:
@@ -609,16 +949,21 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
     
     # Display original question and its embedding if available
     if query is not None and query_embedding is not None:
-        st.subheader("Question Embedding")
+        # st.subheader("Question Embedding")
         
         # Show the original question
         st.markdown("**Pertanyaan Asli**")
         st.text(query)
         
+        # Show the query terms that will be highlighted
+        if query_terms:
+            st.markdown("**Kata Kunci yang Akan Disorot:**")
+            st.text(", ".join(sorted(query_terms)))
+        
         # Show the full question embedding without truncation
         st.markdown("**Embedding Pertanyaan**")
         full_embedding = str(query_embedding.tolist())
-        st.text_area("Full embedding vector:", full_embedding, height=200)
+        st.text_area("Full embedding vector:", full_embedding, height=100)
         
         # Add a separator
         st.markdown("---")
@@ -626,7 +971,7 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
         # Display the retrieved chunks with full vector representations
         st.subheader("Retrieved Chunks")
 
-            # Show deduplication stats if available
+    # Show deduplication stats if available
     if total_before_dedup is not None:
         total_after_dedup = len(embedded_data)
         
@@ -683,17 +1028,26 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             with col2:
                 # Display information about the number of chunks
                 if num_chunks < len(cleaned_embedded_data):
-                    # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
-                    st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
+                    st.write(f"Showing {num_chunks} most relevant chunks out of {len(cleaned_embedded_data)} total chunks")
                 
             # Filter data based on user selection
             filtered_data = cleaned_embedded_data[:num_chunks] if num_chunks < len(cleaned_embedded_data) else cleaned_embedded_data
+            
+            # Calculate what percentage of query terms are in each chunk to show explicit relevance stats
+            term_match_percentages = []
+            
+            for chunk, _ in filtered_data:
+                chunk_lower = chunk.lower()
+                matched_terms = sum(1 for term in query_terms if term in chunk_lower)
+                match_percentage = (matched_terms / len(query_terms)) * 100 if query_terms else 0
+                term_match_percentages.append(match_percentage)
             
             # Prepare data for display
             data = {
                 "No": range(1, len(filtered_data) + 1),
                 "Chunk": [' '.join(chunk.split()) for chunk, _ in filtered_data],
-                "Score": [score for _, score in filtered_data]
+                "Score": [score for _, score in filtered_data],
+                "Term Match %": [f"{percentage:.1f}%" for percentage in term_match_percentages]
             }
             
             df = pd.DataFrame(data)
@@ -703,7 +1057,8 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
                 column_config={
                     "No": st.column_config.NumberColumn(width="small"),
                     "Chunk": st.column_config.TextColumn(width="large"),
-                    "Score": st.column_config.NumberColumn(width="small", format="%.6f")
+                    "Score": st.column_config.NumberColumn(width="small", format="%.6f"),
+                    "Term Match %": st.column_config.TextColumn(width="small")
                 },
                 hide_index=True
             )
@@ -711,19 +1066,25 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             # Add a section to display the full raw text of filtered chunks
             st.subheader("Top Retrieved Content")
             
-            # Format the chunks properly as paragraphs
+            # Format the chunks properly as paragraphs with highlighted query terms
             formatted_chunks = []
-            for chunk, _ in filtered_data:
+            for i, (chunk, score) in enumerate(filtered_data, 1):
                 # The chunks in filtered_data are already cleaned by clean_chunk function
-                # Just clean up excessive whitespace and newlines
+                # Clean up excessive whitespace and newlines
                 cleaned_chunk = ' '.join(chunk.split())
-                formatted_chunks.append(cleaned_chunk)
+                
+                # Highlight query terms
+                highlighted_chunk = highlight_query_terms(cleaned_chunk, query_terms)
+                
+                # Add chunk number and score
+                formatted_chunk = f"**Chunk {i} (Score: {score:.4f}):**\n\n{highlighted_chunk}"
+                formatted_chunks.append(formatted_chunk)
             
             # Join the formatted chunks with proper paragraph breaks
-            full_content = "\n\n".join(formatted_chunks)
+            full_content = "\n\n---\n\n".join(formatted_chunks)
             
-            # Display the formatted content
-            st.text_area("Top filtered chunks:", full_content, height=200)
+            # Display the formatted content with markdown to show highlighting
+            st.markdown(full_content)
         else:
             # Display a message when no chunks are available
             st.info("No chunks retrieved for this query.")
@@ -920,7 +1281,7 @@ def format_response(answer, is_english=False):
     """
     # Add greeting based on the content
     if "skripsi" in answer.lower() or "thesis" in answer.lower():
-        greeting = "Salam Harmoni, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
+        greeting = "Salam Harmoni, " if not is_english else "Alright, "
     else:
         greeting = "Salam Harmoni, " if not is_english else "Alright, "
     # Combine all parts
@@ -1423,6 +1784,84 @@ def main():
         
         # Rerun to update the UI
         st.rerun()
+
+def expand_query(query):
+    """
+    Expand the query with related terms to improve retrieval.
+    
+    Args:
+        query (str): The original query
+        
+    Returns:
+        str: The expanded query with additional related terms
+    """
+    # Dictionary of common terms and their related terms/synonyms
+    expansion_dict = {
+        # Indonesian terms
+        "dosen": ["pengajar", "staf pengajar", "pendidik", "tenaga pengajar", "guru besar", "lektor"],
+        "kurikulum": ["mata kuliah", "pelajaran", "silabus", "materi", "bahan ajar", "rps"],
+        "skripsi": ["tugas akhir", "penelitian akhir", "karya ilmiah", "tesis", "disertasi"],
+        "mahasiswa": ["pelajar", "siswa", "peserta didik", "maba", "anak didik"],
+        "koorprodi": ["koordinator program studi", "ketua program studi", "kaprodi", "ketua jurusan", "pimpinan program"],
+        "pendaftaran": ["registrasi", "daftar", "enroll", "penerimaan", "admisi"],
+        "biaya": ["pembayaran", "harga", "tarif", "keuangan", "uang kuliah", "spp"],
+        "beasiswa": ["bantuan biaya", "tunjangan pendidikan", "bantuan pendidikan", "keringanan biaya"],
+        "ujian": ["tes", "evaluasi", "penilaian", "sidang", "asesmen"],
+        "kuliah": ["perkuliahan", "kelas", "pembelajaran", "studi", "belajar"],
+        "sistem": ["metode", "prosedur", "mekanisme", "alur", "tata cara"],
+        "informasi": ["data", "keterangan", "penjelasan", "detail", "rincian"],
+        "undiksha": ["universitas pendidikan ganesha", "universitas", "kampus", "perguruan tinggi"],
+        
+        # English terms
+        "lecturer": ["teacher", "professor", "instructor", "faculty member", "academic staff"],
+        "curriculum": ["courses", "subjects", "syllabus", "program", "study plan"],
+        "thesis": ["final project", "final paper", "research paper", "capstone", "dissertation"],
+        "student": ["learner", "pupil", "undergraduate", "graduate", "scholar"],
+        "coordinator": ["head", "chair", "director", "lead", "manager"],
+        "registration": ["enrollment", "signup", "admission", "entry", "application"],
+        "fee": ["cost", "payment", "tuition", "price", "charge", "expense"],
+        "scholarship": ["financial aid", "grant", "fellowship", "funding", "stipend"],
+        "exam": ["test", "assessment", "evaluation", "quiz", "examination"],
+        "study": ["learn", "education", "training", "course", "class"],
+        "system": ["method", "procedure", "process", "structure", "framework"],
+        "information": ["data", "details", "facts", "knowledge", "particulars"],
+        "procedure": ["process", "method", "approach", "technique", "steps"]
+    }
+    
+    # Split the query into words
+    words = query.lower().split()
+    
+    # Initialize expanded query with original query
+    expanded = query
+    
+    # Add related terms for each word in the query
+    added_terms = set()
+    for word in words:
+        if word in expansion_dict:
+            # Add up to 3 random related terms (increased from 2)
+            related_terms = expansion_dict[word]
+            if related_terms:
+                # Shuffle to get random terms each time
+                random.shuffle(related_terms)
+                # Add up to 3 terms that haven't been added yet
+                for term in related_terms[:3]:
+                    if term not in expanded.lower() and term not in added_terms:
+                        expanded += f" {term}"
+                        added_terms.add(term)
+    
+    # Also look for compound terms (2-3 word phrases)
+    for i in range(len(words) - 1):
+        two_word = f"{words[i]} {words[i+1]}"
+        if two_word in expansion_dict:
+            related_terms = expansion_dict[two_word]
+            if related_terms:
+                random.shuffle(related_terms)
+                for term in related_terms[:2]:
+                    if term not in expanded.lower() and term not in added_terms:
+                        expanded += f" {term}"
+                        added_terms.add(term)
+    
+    return expanded
 
 if __name__ == "__main__":
     # Initialize the RAG chain at startup
