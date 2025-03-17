@@ -479,7 +479,7 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             unique_docs.append(doc)
         
         # Standard number of chunks to show
-        STANDARD_CHUNK_COUNT = 12
+        STANDARD_CHUNK_COUNT = 10
         
         # If we don't have enough unique chunks, process and add more
         if len(unique_docs) < STANDARD_CHUNK_COUNT:
