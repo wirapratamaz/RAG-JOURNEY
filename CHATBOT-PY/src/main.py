@@ -20,6 +20,7 @@ import csv
 import datetime
 import json
 import random
+import re
 
 # Patch to prevent torch._classes.__path__._path error in Streamlit's file watcher
 import importlib.abc
@@ -79,91 +80,90 @@ def initialize_rag_chain():
         
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
-            template="""Use the following pieces of context to answer the user's question comprehensively and accurately.
-If you don't know the answer, don't try to make up an answer. Instead, respond politely and helpfully with:
-1. An acknowledgment that you don't have specific information about that topic
-2. An offer to help with other related topics that you might know about
+            template="""Gunakan bagian-bagian konteks berikut untuk menjawab pertanyaan pengguna secara komprehensif dan akurat.
+Jika Anda tidak tahu jawabannya, jangan mencoba membuat-buat jawaban. Sebagai gantinya, jawab dengan sopan dan membantu dengan:
+1. Pengakuan bahwa Anda tidak memiliki informasi spesifik tentang topik tersebut
+2. Tawaran untuk membantu dengan topik terkait lainnya yang mungkin Anda ketahui
 
-IMPORTANT INSTRUCTIONS ABOUT KNOWLEDGE SCOPE:
-- You ONLY have knowledge about Program Studi Sistem Informasi Undiksha.
-- If the user asks about ANY other university (besides Undiksha) or ANY other program (besides Sistem Informasi), explicitly state that you do not have information about other programs or universities.
-- NEVER provide specific information about programs other than Sistem Informasi or universities other than Undiksha.
+INSTRUKSI PENTING TENTANG RUANG LINGKUP PENGETAHUAN:
+- Anda HANYA memiliki pengetahuan tentang Program Studi Sistem Informasi Undiksha.
+- Jika pengguna bertanya tentang universitas LAIN (selain Undiksha) atau program LAIN (selain Sistem Informasi), nyatakan secara eksplisit bahwa Anda tidak memiliki informasi tentang program atau universitas lain.
+- JANGAN PERNAH memberikan informasi spesifik tentang program selain Sistem Informasi atau universitas selain Undiksha.
 
-IMPORTANT INSTRUCTIONS ABOUT LANGUAGE:
-- ALWAYS respond in the SAME LANGUAGE that the user used in their question.
-- If the user asks in Bahasa Indonesia, respond in Bahasa Indonesia.
-- If the user asks in English, respond in English.
-- Do not mix languages in your response.
-- LANGUAGE MATCHING IS EXTREMELY IMPORTANT! Always check the language of the original question.
-- For Indonesian questions, respond with: "Mohon maaf, saya tidak memiliki informasi spesifik tentang..."
-- For English questions, respond with: "I'm sorry, I don't have specific information about..."
+INSTRUKSI PENTING TENTANG BAHASA:
+- SELALU menjawab dalam BAHASA YANG SAMA dengan yang digunakan pengguna dalam pertanyaannya.
+- Jika pengguna bertanya dalam Bahasa Indonesia, jawab dalam Bahasa Indonesia.
+- Jika pengguna bertanya dalam Bahasa Inggris, jawab dalam Bahasa Inggris.
+- Jangan mencampur bahasa dalam respons Anda.
+- KESESUAIAN BAHASA SANGAT PENTING! Selalu periksa bahasa dari pertanyaan asli.
+- Untuk pertanyaan dalam Bahasa Indonesia, gunakan: "Mohon maaf, saya tidak memiliki informasi spesifik tentang..."
+- Untuk pertanyaan dalam Bahasa Inggris, gunakan: "I'm sorry, I don't have specific information about..."
 
-IMPORTANT INSTRUCTIONS FOR ABBREVIATION HANDLING:
-- When the user uses "SI", "Si", or "si" in their question, ALWAYS interpret this as "Sistem Informasi" (Information Systems).
-- For example, if the user asks "Siapa koorprodi SI sekarang?", interpret this as "Siapa koorprodi Sistem Informasi sekarang?"
-- If the user asks about "prodi SI", "jurusan SI", "program studi SI", etc., always treat this as referring to the Information Systems program.
-- Similarly, if they ask about "SI Undiksha", interpret this as "Sistem Informasi Undiksha".
-- This applies to all contexts where "SI", "Si", or "si" could reasonably be interpreted as an abbreviation for "Sistem Informasi".
+INSTRUKSI PENTING UNTUK PENANGANAN SINGKATAN:
+- Ketika pengguna menggunakan "SI", "Si", atau "si" dalam pertanyaan mereka, SELALU tafsirkan ini sebagai "Sistem Informasi" (Information Systems).
+- Misalnya, jika pengguna bertanya "Siapa koorprodi SI sekarang?", tafsirkan ini sebagai "Siapa koorprodi Sistem Informasi sekarang?"
+- Jika pengguna bertanya tentang "prodi SI", "jurusan SI", "program studi SI", dll., selalu anggap ini merujuk pada program Sistem Informasi.
+- Demikian pula, jika mereka bertanya tentang "SI Undiksha", tafsirkan ini sebagai "Sistem Informasi Undiksha".
+- Ini berlaku untuk semua konteks di mana "SI", "Si", atau "si" dapat secara wajar ditafsirkan sebagai singkatan dari "Sistem Informasi".
 
-IMPORTANT INSTRUCTIONS FOR LECTURER INFORMATION:
-- For questions about lecturers ("dosen"), ALWAYS provide complete information when available in the context.
-- When asked about a specific lecturer, include their full name, NIP/NIDN, position, and any other relevant details.
-- For questions like "siapa koorprodi SI sekarang?" or questions about specific roles, provide the complete name and position.
-- For questions like "siapa dosen yang bernama pak/bu X?", provide their full name, NIP/NIDN, and position.
-- If asked for follow-up information about a lecturer, such as their NIP or position, provide all available details.
-- NEVER respond with "I don't have information" when the lecturer information is available in the context.
-- If the user asks about a lecturer and you have the information in the context, provide ALL the details you have.
-- For questions about "Koordinator Program Studi" or "Koorprodi", provide the complete information about who holds this position.
+INSTRUKSI PENTING UNTUK INFORMASI DOSEN:
+- Untuk pertanyaan tentang dosen, SELALU berikan informasi lengkap ketika tersedia dalam konteks.
+- Ketika ditanya tentang dosen tertentu, sertakan nama lengkap, NIP/NIDN, jabatan, dan detail relevan lainnya.
+- Untuk pertanyaan seperti "siapa koorprodi SI sekarang?" atau pertanyaan tentang peran spesifik, berikan nama lengkap dan jabatan.
+- Untuk pertanyaan seperti "siapa dosen yang bernama pak/bu X?", berikan nama lengkap, NIP/NIDN, dan jabatan mereka.
+- Jika ditanya informasi lanjutan tentang dosen, seperti NIP atau jabatan mereka, berikan semua detail yang tersedia.
+- JANGAN PERNAH menjawab "Saya tidak memiliki informasi" ketika informasi dosen tersedia dalam konteks.
+- Jika pengguna bertanya tentang dosen dan Anda memiliki informasi dalam konteks, berikan SEMUA detail yang Anda miliki.
+- Untuk pertanyaan tentang "Koordinator Program Studi" atau "Koorprodi", berikan informasi lengkap tentang siapa yang memegang jabatan ini.
 
-IMPORTANT INFORMATION ABOUT SPECIFIC LECTURERS:
-When asked about specific lecturers, ALWAYS provide the following information if the lecturer is mentioned:
-
-- Full name
+INFORMASI PENTING TENTANG DOSEN TERTENTU:
+Ketika ditanya tentang dosen tertentu, SELALU berikan informasi berikut jika dosen tersebut disebutkan:
+- Nama lengkap
 - NIP/NIDN
-- Position
-- Konsentrasi 
+- Jabatan
+- Konsentrasi
 
-IMPORTANT INSTRUCTIONS FOR KOORPRODI QUESTIONS:
-- If the user asks about the "Koorprodi" or "Koordinator Program Studi" or "Kaprodi" or "Ketua Program Studi", you MUST provide the complete information.
-- The current Koorprodi Sistem Informasi is Ir. I Made Dendi Maysanjaya, S.Kom., M.Kom.
-- ALWAYS include this information when asked about the Koorprodi, even if it's not explicitly found in the context.
-- For questions like "siapa koorprodi SI sekarang?" or "siapa koordinator prodi sistem informasi?", always respond with the complete information about Ir. I Made Dendi Maysanjaya, S.Kom., M.Kom.
-- NEVER respond with "I don't have information" when asked about the Koorprodi.
+INSTRUKSI PENTING UNTUK PERTANYAAN KOORPRODI:
+- Jika pengguna bertanya tentang "Koorprodi" atau "Koordinator Program Studi" atau "Kaprodi" atau "Ketua Program Studi", Anda HARUS memberikan informasi lengkap.
+- Koorprodi Sistem Informasi saat ini adalah Ir. I Made Dendi Maysanjaya, S.Kom., M.Kom.
+- SELALU sertakan informasi ini ketika ditanya tentang Koorprodi, bahkan jika tidak ditemukan secara eksplisit dalam konteks.
+- Untuk pertanyaan seperti "siapa koorprodi SI sekarang?" atau "siapa koordinator prodi sistem informasi?", selalu jawab dengan informasi lengkap tentang Ir. I Made Dendi Maysanjaya, S.Kom., M.Kom.
+- JANGAN PERNAH menjawab "Saya tidak memiliki informasi" ketika ditanya tentang Koorprodi.
 
-IMPORTANT INSTRUCTIONS FOR FORMATTING YOUR RESPONSE:
-1. For questions about processes or stages (like thesis completion), follow this format EXACTLY:
-   - Start with "Terdapat [number] tahap utama dalam [process], yaitu:"
-   - Present each stage as a SEPARATE PARAGRAPH (not as bullet points)
-   - For each stage paragraph, start with the stage name in bold, followed by a description
-   - Make sure to use the EXACT stage names as mentioned in the context
-   - End with a paragraph about who is involved in the process
+INSTRUKSI PENTING UNTUK MEMFORMAT RESPONS ANDA:
+1. Untuk pertanyaan tentang proses atau tahapan (seperti penyelesaian skripsi), ikuti format ini PERSIS:
+   - Mulai dengan "Terdapat [jumlah] tahap utama dalam [proses], yaitu:"
+   - Sajikan setiap tahap sebagai PARAGRAF TERPISAH (bukan sebagai poin-poin)
+   - Untuk setiap paragraf tahap, mulai dengan nama tahap dalam huruf tebal, diikuti dengan deskripsi
+   - Pastikan untuk menggunakan nama tahap PERSIS seperti yang disebutkan dalam konteks
+   - Akhiri dengan paragraf tentang siapa yang terlibat dalam proses tersebut
 
-2. For the thesis completion process specifically:
-   - Ensure the four stages are: Pengajuan Topik, Ujian Proposal Skripsi, Penyusunan Skripsi, and Pengesahan Laporan Skripsi
-   - Format each stage as a complete paragraph, not a bullet point
-   - Add a final concluding sentence about who is involved in the entire process
+2. Untuk proses penyelesaian skripsi secara khusus:
+   - Pastikan empat tahapnya adalah: Pengajuan Topik, Ujian Proposal Skripsi, Penyusunan Skripsi, dan Pengesahan Laporan Skripsi
+   - Format setiap tahap sebagai paragraf lengkap, bukan poin-poin
+   - Tambahkan kalimat penutup tentang siapa yang terlibat dalam seluruh proses
 
-3. For conversation endings (when user says thank you or similar):
-   - If the user says "terima kasih", "makasih", "thank you", or similar expressions of gratitude:
-     - Respond with a friendly closing like "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali."
-   - Never respond with just a short phrase like "Prosedur pendaftaran sidang skripsi dilakukan secara online."
-   - Always provide a complete, friendly closing that acknowledges the user's gratitude
+3. Untuk penutup percakapan (ketika pengguna mengucapkan terima kasih atau sejenisnya):
+   - Jika pengguna mengatakan "terima kasih", "makasih", "thank you", atau ekspresi terima kasih serupa:
+     - Jawab dengan penutup yang ramah seperti "Sama-sama! Senang bisa membantu. Jika ada pertanyaan lain, silakan tanyakan kembali."
+   - Jangan pernah hanya menjawab dengan frase singkat seperti "Prosedur pendaftaran sidang skripsi dilakukan secara online."
+   - Selalu berikan penutup lengkap dan ramah yang mengakui ucapan terima kasih pengguna
 
-4. For general information questions (like "apa itu prodi sistem informasi undiksha"):
-   - Provide a comprehensive answer with at least 3-4 paragraphs of information
-   - Include information about the program's curriculum, focus areas, and key features
-   - Mention any specializations or concentrations available
-   - End with a sentence offering to provide more specific information if needed
+4. Untuk pertanyaan informasi umum (seperti "apa itu prodi sistem informasi undiksha"):
+   - Berikan jawaban komprehensif dengan setidaknya 3-4 paragraf informasi
+   - Sertakan informasi tentang kurikulum program, area fokus, dan fitur utama
+   - Sebutkan spesialisasi atau konsentrasi yang tersedia
+   - Akhiri dengan kalimat yang menawarkan untuk memberikan informasi lebih spesifik jika diperlukan
 
-5. NEVER include disclaimers like "I don't have information" when you actually DO have the information in the context.
-   - Only use disclaimers when the question is truly outside your knowledge scope
-   - If you have partial information, provide what you know and then offer to help with related topics
+5. JANGAN PERNAH menyertakan pernyataan seperti "Saya tidak memiliki informasi" ketika Anda sebenarnya MEMILIKI informasi tersebut dalam konteks.
+   - Hanya gunakan pernyataan tersebut ketika pertanyaan benar-benar di luar ruang lingkup pengetahuan Anda
+   - Jika Anda memiliki informasi parsial, berikan apa yang Anda ketahui dan kemudian tawarkan untuk membantu dengan topik terkait
 
-Context: {context}
+Konteks: {context}
 
-Question: {question}
+Pertanyaan: {question}
 
-Answer:""",
+Jawaban:""",
             input_variables=["context", "question"]
         )
         
@@ -241,7 +241,20 @@ def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filenam
         # Write each chunk with its data
         for i, (chunk, score) in enumerate(retrieved_data, 1):
             # Clean up excessive whitespace and newlines in the chunk
-            cleaned_chunk = ' '.join(chunk.split())
+            # Remove "Jawaban: " prefix with the same robust cleaning
+            chunk_to_clean = chunk
+            # Handle different variations of "Jawaban:" with different spacing
+            chunk_to_clean = re.sub(r'Jawaban\s*:', '', chunk_to_clean)
+            chunk_to_clean = re.sub(r'\?\s*Jawaban\s*:', '?', chunk_to_clean)
+            chunk_to_clean = re.sub(r'\.\s*Jawaban\s*:', '.', chunk_to_clean)
+            
+            # Remove question marks at beginning of text or after common patterns
+            chunk_to_clean = re.sub(r'^Sistem\s+Informasi\s*\?', 'Sistem Informasi', chunk_to_clean)
+            chunk_to_clean = re.sub(r'^SI\s*\?', 'SI', chunk_to_clean)
+            chunk_to_clean = re.sub(r'^Program\s+Studi\s*\?', 'Program Studi', chunk_to_clean)
+            chunk_to_clean = re.sub(r'^\s*\?\s*', '', chunk_to_clean)  # Remove leading question marks
+            
+            cleaned_chunk = ' '.join(chunk_to_clean.strip().split())
             
             # Generate the embedding for this chunk
             chunk_embedding = model.encode(chunk).tolist()
@@ -422,13 +435,94 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
                     query_for_retrieval = f"dosen koordinator program studi {query_for_retrieval}"
         
         # Get relevant documents using the potentially modified query
-        retrieved_docs = retriever.get_relevant_documents(query_for_retrieval)
+        # Initially fetch more documents (e.g., 20) to account for duplicates
+        # Use search_kwargs to set the number of results instead of directly setting k
+        retrieved_docs = retriever.get_relevant_documents(
+            query_for_retrieval, 
+            search_kwargs={"k": 20}
+        )
+        
+        # Check if we got any documents
+        if not retrieved_docs:
+            if show_process:
+                st.warning("No documents were retrieved for this query.")
+            logger.warning(f"No documents retrieved for query: {query_for_retrieval}")
+            return [], None
+            
+        total_retrieved = len(retrieved_docs)
+        
+        # Deduplicate chunks and keep track of which ones were removed
+        seen_chunks = set()
+        unique_docs = []
+        duplicate_count = 0
+        removed_docs = []
+        
+        for doc in retrieved_docs:
+            # Create a simplified version of the chunk for deduplication
+            # Focus on the first 100 chars as a chunk signature
+            content = doc.page_content.strip()
+            chunk_signature = content[:100]
+            
+            # Skip documents that contain RSS feed markers (usually contain "appeared first on")
+            if "appeared first on" in content.lower():
+                removed_docs.append(doc)
+                duplicate_count += 1
+                continue
+                
+            # Skip duplicate chunks based on their signature
+            if chunk_signature in seen_chunks:
+                removed_docs.append(doc)
+                duplicate_count += 1
+                continue
+                
+            seen_chunks.add(chunk_signature)
+            unique_docs.append(doc)
+        
+        # Standard number of chunks to show
+        STANDARD_CHUNK_COUNT = 12
+        
+        # If we don't have enough unique chunks, process and add more
+        if len(unique_docs) < STANDARD_CHUNK_COUNT:
+            # Try to get more chunks to reach the standard count
+            # Use search_kwargs to set the number of results
+            more_needed = STANDARD_CHUNK_COUNT - len(unique_docs)
+            additional_k = total_retrieved + more_needed + 5  # Add a buffer
+            
+            # Get more documents
+            more_docs = retriever.get_relevant_documents(
+                query_for_retrieval, 
+                search_kwargs={"k": additional_k}
+            )
+            
+            # Process only the new documents (skip those we've already seen)
+            for doc in more_docs[total_retrieved:]:
+                content = doc.page_content.strip()
+                chunk_signature = content[:100]
+                
+                # Skip RSS feeds and duplicates
+                if "appeared first on" in content.lower() or chunk_signature in seen_chunks:
+                    continue
+                
+                seen_chunks.add(chunk_signature)
+                unique_docs.append(doc)
+                
+                # Stop once we have enough
+                if len(unique_docs) >= STANDARD_CHUNK_COUNT:
+                    break
+        
+        # Trim to standard count if we have more
+        unique_docs = unique_docs[:STANDARD_CHUNK_COUNT]
+        
+        # Store the total number of docs for display purposes
+        total_initial_docs = total_retrieved
+        
+        # Use the deduplicated docs to create embedded data
         embedded_data = []
         
         # Generate query embedding for later use
         query_embedding = model.encode(user_input)
         
-        for doc in retrieved_docs:
+        for doc in unique_docs:
             chunk = doc.page_content
             relevance_score = calculate_relevance_scores(chunk, user_input)
             embedded_data.append((chunk, relevance_score))
@@ -438,7 +532,7 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         
         if show_process and st.session_state.processing_new_question:
             # Display the embedding process only when processing a new question
-            display_embedding_process(embedded_data, user_input, query_embedding)
+            display_embedding_process(embedded_data, user_input, query_embedding, total_initial_docs)
             
             # Export to CSV if requested
             if export_to_csv:
@@ -460,10 +554,58 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     except Exception as e:
         if show_process:
             st.warning(f"An error occurred during retrieval: {e}")
+        logger.error(f"Error in chunking_and_retrieval: {e}", exc_info=True)
         return [], None
 
-def display_embedding_process(embedded_data, query=None, query_embedding=None):
+def display_embedding_process(embedded_data, query=None, query_embedding=None, total_before_dedup=None):
     st.subheader("Embedding Process")
+    
+    # Generate a unique key for sliders in this function instance
+    unique_key = f"slider_{datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    
+    # If no data was provided, display a detailed message and return early
+    if not embedded_data:
+        st.warning("No embedding data available to display. The retrieval process may have failed or returned no results.")
+        st.info("If this problem persists after asking multiple questions, try refreshing the application.")
+        return
+    
+    if query_embedding is None:
+        st.warning("No query embedding available. The embedding process may have failed.")
+        st.info("Check the logs for more information about embedding errors.")
+        return
+    
+    # Function to clean chunks by removing "Jawaban: " prefix
+    def clean_chunk(chunk):
+        # Handle different variations of "Jawaban:" with different spacing
+        chunk = re.sub(r'Jawaban\s*:', '', chunk)
+        chunk = re.sub(r'\?\s*Jawaban\s*:', '?', chunk)
+        chunk = re.sub(r'\.\s*Jawaban\s*:', '.', chunk)
+        
+        # Remove question marks at beginning of text or after common patterns
+        chunk = re.sub(r'^Sistem\s+Informasi\s*\?', 'Sistem Informasi', chunk)
+        chunk = re.sub(r'^SI\s*\?', 'SI', chunk)
+        chunk = re.sub(r'^Program\s+Studi\s*\?', 'Program Studi', chunk)
+        chunk = re.sub(r'^\s*\?\s*', '', chunk)  # Remove leading question marks
+        
+        # Remove "Title:" prefix that often appears in RSS feeds
+        chunk = re.sub(r'^Title:\s*', '', chunk)
+        
+        # Remove HTML tags that might appear in RSS feeds
+        chunk = re.sub(r'<.*?>', '', chunk)
+        
+        # Remove "Content:" prefix
+        chunk = re.sub(r'Content:\s*', '', chunk)
+        
+        # Remove common RSS feed footer pattern
+        chunk = re.sub(r'The post .* appeared first on .*\.', '', chunk)
+        
+        return chunk.strip()
+    
+    # Process embedded data to clean chunks
+    cleaned_embedded_data = []
+    for chunk, score in embedded_data:
+        cleaned_chunk = clean_chunk(chunk)
+        cleaned_embedded_data.append((cleaned_chunk, score))
     
     # Display original question and its embedding if available
     if query is not None and query_embedding is not None:
@@ -483,10 +625,21 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         
         # Display the retrieved chunks with full vector representations
         st.subheader("Retrieved Chunks")
+
+            # Show deduplication stats if available
+    if total_before_dedup is not None:
+        total_after_dedup = len(embedded_data)
+        
+        if total_before_dedup > total_after_dedup:
+            # We processed more chunks but are showing the standard number
+            st.info(f"🔍 Retrieved and processed {total_before_dedup} chunks, showing {total_after_dedup} unique chunks without duplicates.")
+        else:
+            # No duplicates were found
+            st.info(f"🔍 Retrieved {total_before_dedup} chunks with no duplicates found.")
         
         # Create data for the chunks table with full vectors
         chunks_data = []
-        for i, (chunk, score) in enumerate(embedded_data, 1):
+        for i, (chunk, score) in enumerate(cleaned_embedded_data, 1):
             # Generate vector for the chunk
             chunk_embedding = model.encode(chunk).tolist()
             # Format the chunk as a paragraph by replacing newlines with spaces
@@ -517,57 +670,63 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None):
         st.markdown("---")
     
     # Ensure this expander is not nested
-    with st.expander("Detail Embedding", expanded=True):
-        # Add a filter for top chunks
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            # Default to showing top 5 chunks if there are more than 5
-            default_num_chunks = min(5, len(embedded_data))
-            num_chunks = st.slider("Show top N chunks:", 1, len(embedded_data), default_num_chunks)
-        
-        with col2:
-            # Display information about the number of chunks
-            if num_chunks < len(embedded_data):
-                # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
-                st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
+    with st.expander("Detail Chunks", expanded=True):
+        # Only show the slider and details if we have data
+        if len(cleaned_embedded_data) > 0:
+            # Add a filter for top chunks
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                # Default to showing top 5 chunks if there are more than 5
+                default_num_chunks = min(5, len(cleaned_embedded_data))
+                num_chunks = st.slider("Show top N chunks:", 1, len(cleaned_embedded_data), default_num_chunks, key=f"{unique_key}_top_chunks")
             
-        # Filter data based on user selection
-        filtered_data = embedded_data[:num_chunks] if num_chunks < len(embedded_data) else embedded_data
-        
-        # Prepare data for display
-        data = {
-            "No": range(1, len(filtered_data) + 1),
-            "Chunk": [' '.join(chunk.split()) for chunk, _ in filtered_data],
-            "Score": [score for _, score in filtered_data]
-        }
-        
-        df = pd.DataFrame(data)
-        # Display the dataframe with improved formatting
-        st.dataframe(
-            df,
-            column_config={
-                "No": st.column_config.NumberColumn(width="small"),
-                "Chunk": st.column_config.TextColumn(width="large"),
-                "Score": st.column_config.NumberColumn(width="small", format="%.6f")
-            },
-            hide_index=True
-        )
-        
-        # Add a section to display the full raw text of filtered chunks
-        st.subheader("Top Retrieved Content")
-        
-        # Format the chunks properly as paragraphs
-        formatted_chunks = []
-        for chunk, _ in filtered_data:
-            # Clean up excessive whitespace and newlines
-            cleaned_chunk = ' '.join(chunk.split())
-            formatted_chunks.append(cleaned_chunk)
-        
-        # Join the formatted chunks with proper paragraph breaks
-        full_content = "\n\n".join(formatted_chunks)
-        
-        # Display the formatted content
-        st.text_area("Top filtered chunks:", full_content, height=200)
+            with col2:
+                # Display information about the number of chunks
+                if num_chunks < len(cleaned_embedded_data):
+                    # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
+                    st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
+                
+            # Filter data based on user selection
+            filtered_data = cleaned_embedded_data[:num_chunks] if num_chunks < len(cleaned_embedded_data) else cleaned_embedded_data
+            
+            # Prepare data for display
+            data = {
+                "No": range(1, len(filtered_data) + 1),
+                "Chunk": [' '.join(chunk.split()) for chunk, _ in filtered_data],
+                "Score": [score for _, score in filtered_data]
+            }
+            
+            df = pd.DataFrame(data)
+            # Display the dataframe with improved formatting
+            st.dataframe(
+                df,
+                column_config={
+                    "No": st.column_config.NumberColumn(width="small"),
+                    "Chunk": st.column_config.TextColumn(width="large"),
+                    "Score": st.column_config.NumberColumn(width="small", format="%.6f")
+                },
+                hide_index=True
+            )
+            
+            # Add a section to display the full raw text of filtered chunks
+            st.subheader("Top Retrieved Content")
+            
+            # Format the chunks properly as paragraphs
+            formatted_chunks = []
+            for chunk, _ in filtered_data:
+                # The chunks in filtered_data are already cleaned by clean_chunk function
+                # Just clean up excessive whitespace and newlines
+                cleaned_chunk = ' '.join(chunk.split())
+                formatted_chunks.append(cleaned_chunk)
+            
+            # Join the formatted chunks with proper paragraph breaks
+            full_content = "\n\n".join(formatted_chunks)
+            
+            # Display the formatted content
+            st.text_area("Top filtered chunks:", full_content, height=200)
+        else:
+            # Display a message when no chunks are available
+            st.info("No chunks retrieved for this query.")
     
     st.success("Analisis informasi selesai!")
 
@@ -761,18 +920,11 @@ def format_response(answer, is_english=False):
     """
     # Add greeting based on the content
     if "skripsi" in answer.lower() or "thesis" in answer.lower():
-        greeting = "Baik, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
+        greeting = "Salam Harmoni, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
     else:
-        greeting = "Baik, " if not is_english else "Alright, "
-
-    # Add conversation markers
-    if is_english:
-        closing = "\n\nIs there anything specific about these stages that you'd like to know more about? I'm here to help! 😊"
-    else:
-        closing = "\n\nApakah ada pertanyaan lain yang ingin Anda ketahui? Saya siap membantu! 😊"
-
+        greeting = "Salam Harmoni, " if not is_english else "Alright, "
     # Combine all parts
-    formatted_answer = f"{greeting}{answer}{closing}"
+    formatted_answer = f"{greeting}{answer}"
     
     return formatted_answer
 
@@ -1180,10 +1332,23 @@ def main():
                         
         # Display the embedding process info (if available)
         if st.session_state.dev_mode_embedded_data is not None and not st.session_state.processing_new_question:
+            # Get the relevant documents using the proper search_kwargs
+            try:
+                relevant_docs = retriever.get_relevant_documents(
+                    st.session_state.dev_mode_query, 
+                    search_kwargs={"k": 20}
+                )
+                total_docs = len(relevant_docs)
+            except Exception as e:
+                logger.error(f"Error retrieving relevant documents: {e}", exc_info=True)
+                st.warning(f"Could not retrieve relevant documents: {e}")
+                total_docs = len(st.session_state.dev_mode_embedded_data)
+            
             display_embedding_process(
                 st.session_state.dev_mode_embedded_data,
                 st.session_state.dev_mode_query,
-                st.session_state.dev_mode_query_embedding
+                st.session_state.dev_mode_query_embedding,
+                total_docs
             )
             
             # If we exported to CSV, show download button
@@ -1225,21 +1390,36 @@ def main():
         # Set flag that we're processing a new question
         st.session_state.processing_new_question = True
         
+        # Reset previous embedding data to avoid display issues with old data
+        if show_process:
+            st.session_state.dev_mode_embedded_data = None
+            st.session_state.dev_mode_query_embedding = None
+            st.session_state.dev_mode_query = None
+            st.session_state.dev_mode_csv_path = None
+            
         # Process the query
         if show_process:
-            result = chunking_and_retrieval(user_input, show_process, export_to_csv)
-            
-            # Handle different return types
-            if export_to_csv and len(result) == 3:
-                embedded_data, query_embedding, csv_path = result
-                st.session_state.dev_mode_csv_path = csv_path
-            else:
-                embedded_data, query_embedding = result
-            
-            # Store in session state for persistence
-            st.session_state.dev_mode_embedded_data = embedded_data
-            st.session_state.dev_mode_query_embedding = query_embedding
-            st.session_state.dev_mode_query = user_input
+            try:
+                result = chunking_and_retrieval(user_input, show_process, export_to_csv)
+                
+                # Handle different return types
+                if export_to_csv and len(result) == 3:
+                    embedded_data, query_embedding, csv_path = result
+                    st.session_state.dev_mode_csv_path = csv_path
+                else:
+                    embedded_data, query_embedding = result
+                
+                # Only store in session state if valid data is returned
+                if embedded_data and query_embedding is not None:
+                    st.session_state.dev_mode_embedded_data = embedded_data
+                    st.session_state.dev_mode_query_embedding = query_embedding
+                    st.session_state.dev_mode_query = user_input
+                    logger.info(f"Successfully stored {len(embedded_data)} embedded chunks for query: {user_input[:50]}...")
+                else:
+                    logger.warning("No valid embedding data returned from chunking_and_retrieval")
+            except Exception as e:
+                logger.error(f"Error processing embeddings: {e}", exc_info=True)
+                st.error(f"An error occurred during retrieval: {e}")
         else:
             # In user mode, we don't need to store the results
             chunking_and_retrieval(user_input, show_process)
