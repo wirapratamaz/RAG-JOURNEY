@@ -1387,6 +1387,16 @@ def main():
         # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         
+        # Display the user message immediately
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            
+            # Show a temporary loading message while processing
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                message_placeholder.markdown("⏳ Sedang memproses...")
+        
         # Set flag that we're processing a new question
         st.session_state.processing_new_question = True
         
@@ -1426,6 +1436,9 @@ def main():
         
         # Generate response
         answer = generation(user_input, show_process)
+        
+        # Update the placeholder with the actual response
+        message_placeholder.markdown(answer)
         
         # Store the latest answer
         st.session_state.dev_mode_latest_answer = answer
