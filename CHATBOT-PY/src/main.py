@@ -441,6 +441,14 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             query_for_retrieval, 
             search_kwargs={"k": 20}
         )
+        
+        # Check if we got any documents
+        if not retrieved_docs:
+            if show_process:
+                st.warning("No documents were retrieved for this query.")
+            logger.warning(f"No documents retrieved for query: {query_for_retrieval}")
+            return [], None
+            
         total_retrieved = len(retrieved_docs)
         
         # Deduplicate chunks and keep track of which ones were removed
@@ -552,6 +560,20 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
 def display_embedding_process(embedded_data, query=None, query_embedding=None, total_before_dedup=None):
     st.subheader("Embedding Process")
     
+    # Generate a unique key for sliders in this function instance
+    unique_key = f"slider_{datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+    
+    # If no data was provided, display a detailed message and return early
+    if not embedded_data:
+        st.warning("No embedding data available to display. The retrieval process may have failed or returned no results.")
+        st.info("If this problem persists after asking multiple questions, try refreshing the application.")
+        return
+    
+    if query_embedding is None:
+        st.warning("No query embedding available. The embedding process may have failed.")
+        st.info("Check the logs for more information about embedding errors.")
+        return
+    
     # Function to clean chunks by removing "Jawaban: " prefix
     def clean_chunk(chunk):
         # Handle different variations of "Jawaban:" with different spacing
@@ -649,57 +671,62 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
     
     # Ensure this expander is not nested
     with st.expander("Detail Chunks", expanded=True):
-        # Add a filter for top chunks
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            # Default to showing top 5 chunks if there are more than 5
-            default_num_chunks = min(5, len(cleaned_embedded_data))
-            num_chunks = st.slider("Show top N chunks:", 1, len(cleaned_embedded_data), default_num_chunks)
-        
-        with col2:
-            # Display information about the number of chunks
-            if num_chunks < len(cleaned_embedded_data):
-                # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
-                st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
+        # Only show the slider and details if we have data
+        if len(cleaned_embedded_data) > 0:
+            # Add a filter for top chunks
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                # Default to showing top 5 chunks if there are more than 5
+                default_num_chunks = min(5, len(cleaned_embedded_data))
+                num_chunks = st.slider("Show top N chunks:", 1, len(cleaned_embedded_data), default_num_chunks, key=f"{unique_key}_top_chunks")
             
-        # Filter data based on user selection
-        filtered_data = cleaned_embedded_data[:num_chunks] if num_chunks < len(cleaned_embedded_data) else cleaned_embedded_data
-        
-        # Prepare data for display
-        data = {
-            "No": range(1, len(filtered_data) + 1),
-            "Chunk": [' '.join(chunk.split()) for chunk, _ in filtered_data],
-            "Score": [score for _, score in filtered_data]
-        }
-        
-        df = pd.DataFrame(data)
-        # Display the dataframe with improved formatting
-        st.dataframe(
-            df,
-            column_config={
-                "No": st.column_config.NumberColumn(width="small"),
-                "Chunk": st.column_config.TextColumn(width="large"),
-                "Score": st.column_config.NumberColumn(width="small", format="%.6f")
-            },
-            hide_index=True
-        )
-        
-        # Add a section to display the full raw text of filtered chunks
-        st.subheader("Top Retrieved Content")
-        
-        # Format the chunks properly as paragraphs
-        formatted_chunks = []
-        for chunk, _ in filtered_data:
-            # The chunks in filtered_data are already cleaned by clean_chunk function
-            # Just clean up excessive whitespace and newlines
-            cleaned_chunk = ' '.join(chunk.split())
-            formatted_chunks.append(cleaned_chunk)
-        
-        # Join the formatted chunks with proper paragraph breaks
-        full_content = "\n\n".join(formatted_chunks)
-        
-        # Display the formatted content
-        st.text_area("Top filtered chunks:", full_content, height=200)
+            with col2:
+                # Display information about the number of chunks
+                if num_chunks < len(cleaned_embedded_data):
+                    # st.write(f"Showing {num_chunks} most relevant chunks out of {len(embedded_data)} total chunks")
+                    st.write(f"Showing {num_chunks} most relevant chunks out of 10 total chunks")
+                
+            # Filter data based on user selection
+            filtered_data = cleaned_embedded_data[:num_chunks] if num_chunks < len(cleaned_embedded_data) else cleaned_embedded_data
+            
+            # Prepare data for display
+            data = {
+                "No": range(1, len(filtered_data) + 1),
+                "Chunk": [' '.join(chunk.split()) for chunk, _ in filtered_data],
+                "Score": [score for _, score in filtered_data]
+            }
+            
+            df = pd.DataFrame(data)
+            # Display the dataframe with improved formatting
+            st.dataframe(
+                df,
+                column_config={
+                    "No": st.column_config.NumberColumn(width="small"),
+                    "Chunk": st.column_config.TextColumn(width="large"),
+                    "Score": st.column_config.NumberColumn(width="small", format="%.6f")
+                },
+                hide_index=True
+            )
+            
+            # Add a section to display the full raw text of filtered chunks
+            st.subheader("Top Retrieved Content")
+            
+            # Format the chunks properly as paragraphs
+            formatted_chunks = []
+            for chunk, _ in filtered_data:
+                # The chunks in filtered_data are already cleaned by clean_chunk function
+                # Just clean up excessive whitespace and newlines
+                cleaned_chunk = ' '.join(chunk.split())
+                formatted_chunks.append(cleaned_chunk)
+            
+            # Join the formatted chunks with proper paragraph breaks
+            full_content = "\n\n".join(formatted_chunks)
+            
+            # Display the formatted content
+            st.text_area("Top filtered chunks:", full_content, height=200)
+        else:
+            # Display a message when no chunks are available
+            st.info("No chunks retrieved for this query.")
     
     st.success("Analisis informasi selesai!")
 
@@ -1291,11 +1318,16 @@ def main():
         # Display the embedding process info (if available)
         if st.session_state.dev_mode_embedded_data is not None and not st.session_state.processing_new_question:
             # Get the relevant documents using the proper search_kwargs
-            relevant_docs = retriever.get_relevant_documents(
-                st.session_state.dev_mode_query, 
-                search_kwargs={"k": 20}
-            )
-            total_docs = len(relevant_docs)
+            try:
+                relevant_docs = retriever.get_relevant_documents(
+                    st.session_state.dev_mode_query, 
+                    search_kwargs={"k": 20}
+                )
+                total_docs = len(relevant_docs)
+            except Exception as e:
+                logger.error(f"Error retrieving relevant documents: {e}", exc_info=True)
+                st.warning(f"Could not retrieve relevant documents: {e}")
+                total_docs = len(st.session_state.dev_mode_embedded_data)
             
             display_embedding_process(
                 st.session_state.dev_mode_embedded_data,
@@ -1343,21 +1375,36 @@ def main():
         # Set flag that we're processing a new question
         st.session_state.processing_new_question = True
         
+        # Reset previous embedding data to avoid display issues with old data
+        if show_process:
+            st.session_state.dev_mode_embedded_data = None
+            st.session_state.dev_mode_query_embedding = None
+            st.session_state.dev_mode_query = None
+            st.session_state.dev_mode_csv_path = None
+            
         # Process the query
         if show_process:
-            result = chunking_and_retrieval(user_input, show_process, export_to_csv)
-            
-            # Handle different return types
-            if export_to_csv and len(result) == 3:
-                embedded_data, query_embedding, csv_path = result
-                st.session_state.dev_mode_csv_path = csv_path
-            else:
-                embedded_data, query_embedding = result
-            
-            # Store in session state for persistence
-            st.session_state.dev_mode_embedded_data = embedded_data
-            st.session_state.dev_mode_query_embedding = query_embedding
-            st.session_state.dev_mode_query = user_input
+            try:
+                result = chunking_and_retrieval(user_input, show_process, export_to_csv)
+                
+                # Handle different return types
+                if export_to_csv and len(result) == 3:
+                    embedded_data, query_embedding, csv_path = result
+                    st.session_state.dev_mode_csv_path = csv_path
+                else:
+                    embedded_data, query_embedding = result
+                
+                # Only store in session state if valid data is returned
+                if embedded_data and query_embedding is not None:
+                    st.session_state.dev_mode_embedded_data = embedded_data
+                    st.session_state.dev_mode_query_embedding = query_embedding
+                    st.session_state.dev_mode_query = user_input
+                    logger.info(f"Successfully stored {len(embedded_data)} embedded chunks for query: {user_input[:50]}...")
+                else:
+                    logger.warning("No valid embedding data returned from chunking_and_retrieval")
+            except Exception as e:
+                logger.error(f"Error processing embeddings: {e}", exc_info=True)
+                st.error(f"An error occurred during retrieval: {e}")
         else:
             # In user mode, we don't need to store the results
             chunking_and_retrieval(user_input, show_process)
