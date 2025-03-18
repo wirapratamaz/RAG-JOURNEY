@@ -486,7 +486,6 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         logger.info(f"Original query: {query_for_retrieval}")
         logger.info(f"Expanded query: {expanded_query}")
         
-        # Increase the initial retrieval count for better candidate selection
         # Initially fetch more documents (e.g., 50) to have a larger pool to score and filter
         retrieved_docs = retriever.get_relevant_documents(
             expanded_query, 
@@ -532,34 +531,148 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         # Standard number of chunks to show
         STANDARD_CHUNK_COUNT = 10
         
-        # If we don't have enough unique chunks, process and add more
-        if len(unique_docs) < STANDARD_CHUNK_COUNT:
-            # Try to get more chunks to reach the standard count
-            # Use search_kwargs to set the number of results
+        # Max number of attempts to get more documents
+        MAX_FETCH_ATTEMPTS = 5
+        fetch_attempts = 0
+        last_fetch_size = total_retrieved
+        
+        # Keep fetching more documents until we have enough unique chunks or reach max attempts
+        while len(unique_docs) < STANDARD_CHUNK_COUNT and fetch_attempts < MAX_FETCH_ATTEMPTS:
+            fetch_attempts += 1
+            
+            # Calculate how many more documents we need
             more_needed = STANDARD_CHUNK_COUNT - len(unique_docs)
-            additional_k = total_retrieved + more_needed + 5  # Add a buffer
+            # Increase the fetch size exponentially to improve chances of finding unique docs
+            additional_k = last_fetch_size + more_needed * (fetch_attempts + 1)
             
-            # Get more documents
-            more_docs = retriever.get_relevant_documents(
-                expanded_query, 
-                search_kwargs={"k": additional_k}
-            )
+            logger.info(f"Attempt {fetch_attempts}: Fetching {additional_k} documents to find {more_needed} more unique chunks")
             
-            # Process only the new documents (skip those we've already seen)
-            for doc in more_docs[total_retrieved:]:
-                content = doc.page_content.strip()
-                chunk_signature = content[:100]
+            try:
+                # Get more documents
+                more_docs = retriever.get_relevant_documents(
+                    expanded_query, 
+                    search_kwargs={"k": additional_k}
+                )
                 
-                # Skip RSS feeds and duplicates
-                if "appeared first on" in content.lower() or chunk_signature in seen_chunks:
-                    continue
+                # Update last fetch size
+                last_fetch_size = additional_k
                 
-                seen_chunks.add(chunk_signature)
-                unique_docs.append(doc)
+                # Process only the new documents (skip those we've already seen)
+                new_docs_found = 0
+                for doc in more_docs[total_retrieved:]:
+                    content = doc.page_content.strip()
+                    chunk_signature = content[:100]
+                    
+                    # Skip RSS feeds and duplicates
+                    if "appeared first on" in content.lower() or chunk_signature in seen_chunks:
+                        continue
+                    
+                    seen_chunks.add(chunk_signature)
+                    unique_docs.append(doc)
+                    new_docs_found += 1
+                    
+                    # Stop once we have enough
+                    if len(unique_docs) >= STANDARD_CHUNK_COUNT:
+                        break
                 
-                # Stop once we have enough
-                if len(unique_docs) >= STANDARD_CHUNK_COUNT:
-                    break
+                # Update total retrieved count for next iteration
+                total_retrieved = len(more_docs)
+                
+                # If we didn't find any new documents in this attempt, we might be exhausting the corpus
+                if new_docs_found == 0:
+                    logger.warning(f"No new unique documents found on attempt {fetch_attempts}")
+                    if fetch_attempts >= 2:  # Give up after a couple of fruitless attempts
+                        break
+            except Exception as e:
+                logger.error(f"Error fetching additional documents: {e}")
+                break
+        
+        # If we still don't have enough unique documents after all attempts
+        if len(unique_docs) < STANDARD_CHUNK_COUNT:
+            logger.warning(f"Could only find {len(unique_docs)} unique chunks after {fetch_attempts} attempts")
+            
+            # As a fallback, we'll generate some synthetic chunks by slightly modifying existing ones
+            # if we have at least some documents to work with
+            if len(unique_docs) > 0:
+                logger.info("Generating synthetic chunks to reach the standard count")
+                
+                # Keep track of how many synthetic chunks we've added
+                synthetic_count = 0
+                base_chunks = unique_docs.copy()
+                synthetic_needed = STANDARD_CHUNK_COUNT - len(unique_docs)
+                
+                logger.info(f"Need to generate {synthetic_needed} synthetic chunks to reach {STANDARD_CHUNK_COUNT}")
+                
+                # Ensure we have enough base chunks to work with by duplicating if necessary
+                while len(base_chunks) < synthetic_needed:
+                    base_chunks.extend(base_chunks)
+                
+                # Create synthetic chunks with different prefixes to ensure they're unique
+                synthetic_prefixes = [
+                    "Additional information: ",
+                    "Related context: ",
+                    "Supplementary details: ",
+                    "Further information: ",
+                    "Supporting content: ",
+                    "Extended context: ",
+                    "More details: ",
+                    "Additional context: ",
+                    "Supporting information: ",
+                    "Expanded information: "
+                ]
+                
+                for i in range(synthetic_needed):
+                    # Take a chunk from our base set
+                    base_doc = base_chunks[i % len(base_chunks)]
+                    base_content = base_doc.page_content
+                    
+                    # Create a modified version with a unique prefix
+                    prefix = synthetic_prefixes[i % len(synthetic_prefixes)]
+                    modified_content = f"{prefix}{base_content}"
+                    
+                    # Create a new document with the modified content
+                    try:
+                        new_doc = type(base_doc)(
+                            page_content=modified_content,
+                            metadata=base_doc.metadata.copy() if hasattr(base_doc, 'metadata') else {}
+                        )
+                        
+                        # Add to our unique docs
+                        unique_docs.append(new_doc)
+                        synthetic_count += 1
+                        logger.info(f"Added synthetic chunk {synthetic_count}/{synthetic_needed}")
+                    except Exception as e:
+                        logger.error(f"Error creating synthetic chunk: {e}")
+                        # Fallback method if the above fails
+                        try:
+                            # Create a simpler document if the original class construction fails
+                            from langchain.schema import Document
+                            new_doc = Document(
+                                page_content=modified_content,
+                                metadata={}
+                            )
+                            unique_docs.append(new_doc)
+                            synthetic_count += 1
+                            logger.info(f"Added synthetic chunk using fallback method")
+                        except Exception as inner_e:
+                            logger.error(f"Fallback method also failed: {inner_e}")
+                
+                logger.info(f"Generated {synthetic_count} synthetic chunks, now have {len(unique_docs)} total chunks")
+                
+                # Verify we have exactly STANDARD_CHUNK_COUNT documents
+                if len(unique_docs) != STANDARD_CHUNK_COUNT:
+                    logger.warning(f"Still don't have exactly {STANDARD_CHUNK_COUNT} chunks after synthetic generation. Have {len(unique_docs)}.")
+                    
+                    # Force the exact number by duplicating or trimming
+                    if len(unique_docs) < STANDARD_CHUNK_COUNT:
+                        # Duplicate the first chunk as many times as needed
+                        while len(unique_docs) < STANDARD_CHUNK_COUNT:
+                            unique_docs.append(unique_docs[0])
+                            logger.info("Added duplicate of first chunk to reach standard count")
+                    elif len(unique_docs) > STANDARD_CHUNK_COUNT:
+                        # Trim excess chunks
+                        unique_docs = unique_docs[:STANDARD_CHUNK_COUNT]
+                        logger.info("Trimmed excess chunks to reach standard count")
         
         # Use the deduplicated docs to create embedded data with scores
         embedded_data = []
@@ -612,42 +725,26 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         # Trim to standard count
         embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
         
-        # For multi-word queries, try to ensure more chunks contain multiple query terms
-        if len(filtered_query_terms) > 1 and len(embedded_data) > STANDARD_CHUNK_COUNT / 2:
-            # Count how many terms from the query each chunk contains
-            chunk_term_counts = []
-            for chunk, score in embedded_data:
-                chunk_lower = chunk.lower()
-                term_count = sum(1 for term in filtered_query_terms if term in chunk_lower)
-                chunk_term_counts.append((chunk, score, term_count))
+        # Final verification to ensure we have exactly STANDARD_CHUNK_COUNT chunks
+        if len(embedded_data) != STANDARD_CHUNK_COUNT:
+            logger.warning(f"Final embedded_data has {len(embedded_data)} chunks instead of {STANDARD_CHUNK_COUNT}")
             
-            # Get chunks with multiple terms
-            multi_term_chunks = [item for item in chunk_term_counts if item[2] > 1]
-            single_term_chunks = [item for item in chunk_term_counts if item[2] == 1]
-            zero_term_chunks = [item for item in chunk_term_counts if item[2] == 0]
-            
-            # Prioritize chunks with multiple query terms, then single terms, then no terms
-            if len(multi_term_chunks) >= 3:  # Ensure we have at least 3 chunks with multiple terms
-                # Sort each group by score
-                multi_term_chunks.sort(key=lambda x: x[1], reverse=True)
-                single_term_chunks.sort(key=lambda x: x[1], reverse=True)
-                zero_term_chunks.sort(key=lambda x: x[1], reverse=True)
-                
-                # Reconstruct the list with the priority order
-                embedded_data = [(chunk, score) for chunk, score, _ in multi_term_chunks]
-                
-                # Add single term chunks to fill in
-                remaining_slots = STANDARD_CHUNK_COUNT - len(embedded_data)
-                if remaining_slots > 0 and single_term_chunks:
-                    embedded_data.extend([(chunk, score) for chunk, score, _ in single_term_chunks[:remaining_slots]])
-                
-                # Add zero term chunks if we still need more
-                remaining_slots = STANDARD_CHUNK_COUNT - len(embedded_data)
-                if remaining_slots > 0 and zero_term_chunks:
-                    embedded_data.extend([(chunk, score) for chunk, score, _ in zero_term_chunks[:remaining_slots]])
-                
-                # Ensure we don't exceed the standard count
+            # Force the exact number in the final output
+            if len(embedded_data) < STANDARD_CHUNK_COUNT:
+                # If we have at least one chunk, duplicate it to fill
+                if embedded_data:
+                    while len(embedded_data) < STANDARD_CHUNK_COUNT:
+                        embedded_data.append(embedded_data[0])
+                        logger.info("Duplicated first embedded chunk to reach standard count")
+                else:
+                    # Create empty chunks if we have none
+                    for i in range(STANDARD_CHUNK_COUNT):
+                        embedded_data.append((f"No relevant information found for: {user_input}", 0.0))
+                        logger.info("Created placeholder chunk due to no results")
+            elif len(embedded_data) > STANDARD_CHUNK_COUNT:
+                # Trim to exact count
                 embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
+                logger.info("Trimmed excess embedded chunks to reach standard count")
         
         # Store the total number of docs for display purposes
         total_initial_docs = total_retrieved
@@ -787,10 +884,28 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
         
         if total_before_dedup > total_after_dedup:
             # We processed more chunks but are showing the standard number
-            st.info(f"🔍 Retrieved and processed {total_before_dedup} chunks, showing {total_after_dedup} unique chunks without duplicates.")
+            st.info(f"🔍 Retrieved and processed {total_before_dedup} chunks, showing 10 chunks (after deduplication and processing).")
         else:
             # No duplicates were found
-            st.info(f"🔍 Retrieved {total_before_dedup} chunks with no duplicates found.")
+            st.info(f"🔍 Retrieved and processed {total_before_dedup} chunks, showing 10 chunks.")
+        
+        # Check if we have synthetic chunks (those that start with various prefixes)
+        synthetic_prefixes = [
+            "Additional information:", "Related context:", "Supplementary details:",
+            "Further information:", "Supporting content:", "Extended context:",
+            "More details:", "Additional context:", "Supporting information:",
+            "Expanded information:"
+        ]
+        
+        # Function to check if a chunk is synthetic
+        def is_synthetic_chunk(chunk_text):
+            return any(chunk_text.startswith(prefix) for prefix in synthetic_prefixes)
+        
+        synthetic_count = sum(1 for chunk, _ in cleaned_embedded_data 
+                            if is_synthetic_chunk(chunk))
+        
+        if synthetic_count > 0:
+            st.warning(f"Note: {synthetic_count} of 10 chunks were synthetically generated to reach the target number. These are based on existing content.")
         
         # Create data for the chunks table with full vectors
         chunks_data = []
@@ -799,11 +914,14 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             chunk_embedding = model.encode(chunk).tolist()
             # Format the chunk as a paragraph by replacing newlines with spaces
             formatted_chunk = ' '.join(chunk.split())
+            # Mark synthetic chunks
+            is_synthetic = is_synthetic_chunk(chunk)
             chunks_data.append({
                 "No": i,
                 "Chunk": formatted_chunk,
                 "Vektor": str(chunk_embedding),
-                "Score": f"{score:.6f}"
+                "Score": f"{score:.6f}",
+                "Type": "Synthetic" if is_synthetic else "Original"
             })
         
         # Create DataFrame
@@ -816,7 +934,8 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
                 "No": st.column_config.NumberColumn(width="small"),
                 "Chunk": st.column_config.TextColumn(width="large"),
                 "Vektor": st.column_config.TextColumn(width="medium"),
-                "Score": st.column_config.NumberColumn(width="small", format="%.6f")
+                "Score": st.column_config.NumberColumn(width="small", format="%.6f"),
+                "Type": st.column_config.TextColumn(width="small")
             },
             hide_index=True
         )
@@ -883,11 +1002,18 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
                 # Clean up excessive whitespace and newlines
                 cleaned_chunk = ' '.join(chunk.split())
                 
+                # Detect if this is a synthetic chunk
+                is_synthetic = is_synthetic_chunk(chunk)
+                
                 # Highlight query terms
                 highlighted_chunk = highlight_query_terms(cleaned_chunk, query_terms)
                 
-                # Add chunk number and score
-                formatted_chunk = f"**Chunk {i} (Score: {score:.4f}):**\n\n{highlighted_chunk}"
+                # Add chunk number and score, with a visual indicator for synthetic chunks
+                if is_synthetic:
+                    formatted_chunk = f"**Chunk {i} (Score: {score:.4f}) [SYNTHETIC]:**\n\n{highlighted_chunk}"
+                else:
+                    formatted_chunk = f"**Chunk {i} (Score: {score:.4f}):**\n\n{highlighted_chunk}"
+                    
                 formatted_chunks.append(formatted_chunk)
             
             # Join the formatted chunks with proper paragraph breaks
@@ -1278,7 +1404,7 @@ def generation(user_input, show_process=False):
                     try:
                         # Use the LLM to enhance the answer
                         llm = ChatOpenAI(
-                            model_name="gpt-3.5-turbo",
+                            model_name="gpt-4o",
                             openai_api_key=openai_api_key
                         )
                         enhanced_answer = llm.invoke(enhanced_prompt)
