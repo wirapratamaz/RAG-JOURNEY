@@ -116,6 +116,23 @@ INSTRUKSI PENTING UNTUK INFORMASI DOSEN:
 - Jika pengguna bertanya tentang dosen dan Anda memiliki informasi dalam konteks, berikan SEMUA detail yang Anda miliki.
 - Untuk pertanyaan tentang "Koordinator Program Studi" atau "Koorprodi", berikan informasi lengkap tentang siapa yang memegang jabatan ini.
 
+INSTRUKSI PENTING UNTUK DOKUMEN KURIKULUM DAN TAUTAN:
+- Ketika pengguna bertanya tentang "dokumen kurikulum", "akses kurikulum", "link kurikulum", "tautan kurikulum", atau hal terkait:
+  - SELALU berikan semua tautan Google Drive yang tersedia dalam konteks
+  - Format tanggapan sebagai daftar dengan judul atau nama dokumen, diikuti oleh tautan lengkap
+  - Contoh format yang tepat:
+    "Mahasiswa dapat mengakses dokumen kurikulum melalui tautan resmi yang telah disediakan, antara lain:
+    
+    – Kurikulum Undiksha 2024:
+    https://drive.google.com/file/d/XXXXXX/view
+    
+    – Kurikulum MBKM Undiksha 2020:
+    https://drive.google.com/file/d/YYYYYY/view"
+  - Pastikan semua tautan dapat diklik (URL lengkap)
+  - Jangan menambahkan atau menghilangkan tautan yang ada dalam konteks
+  - Gunakan tanda hubung (–) di awal setiap entri dalam daftar
+  - Sertakan tahun atau informasi versi kurikulum jika tersedia
+
 INFORMASI PENTING TENTANG DOSEN TERTENTU:
 Ketika ditanya tentang dosen tertentu, SELALU berikan informasi berikut jika dosen tersebut disebutkan:
 - Nama lengkap
@@ -228,26 +245,84 @@ def calculate_relevance_scores(chunk, query):
     
     # Add an exact match bonus for multi-word phrases (increased from 0.3 to 0.5)
     exact_match_bonus = 0
-    if len(query) > 3:  # Only for non-trivial queries
-        if query.lower() in chunk_lower:
-            exact_match_bonus = 0.5
     
-    # Add a proximity bonus for multi-word queries
-    proximity_bonus = 0
-    if len(query_keywords) > 1:
-        # Check if multiple keywords appear close to each other in the chunk
-        proximity_count = 0
-        words = chunk_lower.split()
-        for i in range(len(words) - 1):
-            if words[i] in query_keywords and words[i+1] in query_keywords:
-                proximity_count += 1
-        
-        # Normalize and scale the proximity bonus
-        if proximity_count > 0:
-            proximity_bonus = 0.3 * min(proximity_count / (len(query_keywords) - 1), 1.0)
+    # If there are at least 2 keywords, check for exact phrases
+    if len(query_keywords) >= 2:
+        # Create a window of 3-5 words from the query to check for phrase matches
+        query_words = query.lower().split()
+        for i in range(len(query_words) - 1):  # Need at least 2 words for a phrase
+            end_idx = min(i + 5, len(query_words))  # Look at up to 5 words at a time
+            for j in range(i + 1, end_idx):
+                phrase = ' '.join(query_words[i:j+1])
+                if len(phrase) > 5 and phrase in chunk_lower:  # Only count meaningful phrases
+                    exact_match_bonus = 0.5
+                    break
+            if exact_match_bonus > 0:
+                break
     
-    # Return combined score with all bonuses
-    return similarity + keyword_bonus + exact_match_bonus + proximity_bonus
+    # Add bonuses for instructive content (answers, steps, procedures)
+    answer_bonus = 0
+    if "langkah-langkah" in chunk_lower or "prosedur" in chunk_lower or "tahapan" in chunk_lower:
+        answer_bonus += 0.3
+    
+    # Bonus for numbered lists which indicate step-by-step instructions
+    numbered_list_bonus = 0
+    if re.search(r'\d+[\.\)]', chunk_lower):
+        # Count how many numbered points are in the chunk
+        numbered_points = len(re.findall(r'\d+[\.\)]', chunk_lower))
+        if numbered_points >= 3:  # Significant numbered list
+            numbered_list_bonus = 0.4
+        elif numbered_points > 0:
+            numbered_list_bonus = 0.2
+    
+    # Special bonus for document links in chunks (especially for curriculum access questions)
+    document_link_bonus = 0
+    # Check if the query is about accessing documents, curriculum, or links
+    document_query_terms = ['dokumen', 'document', 'kurikulum', 'curriculum', 'akses', 'access', 
+                           'link', 'tautan', 'unduh', 'download', 'file', 'buku', 'buku pedoman',
+                           'panduan', 'guide', 'manual', 'handbook', 'sillabus', 'silabus']
+    
+    is_document_query = any(term in query.lower() for term in document_query_terms)
+    
+    # Check if chunk contains document links
+    has_drive_links = "drive.google.com" in chunk_lower
+    has_curriculum_mention = "kurikulum" in chunk_lower or "curriculum" in chunk_lower
+    
+    # Apply a very high bonus for relevant chunks with document links
+    if is_document_query:
+        if has_drive_links:
+            # Count how many links are in the chunk
+            link_count = chunk_lower.count("drive.google.com")
+            # Bigger bonus for more links
+            document_link_bonus = 1.0 + (0.2 * min(link_count, 5))  # Cap the bonus at 2.0 (for 5+ links)
+            
+            # Even bigger bonus if it has both links and mentions curriculum
+            if has_curriculum_mention:
+                document_link_bonus += 0.5
+    
+    # Penalty for chunks that are too short (likely just questions with no answers)
+    length_penalty = 0
+    if len(chunk.strip()) < 200:
+        length_penalty = 0.5  # Heavy penalty for very short chunks
+    elif len(chunk.strip()) < 400:
+        length_penalty = 0.2  # Moderate penalty for somewhat short chunks
+    
+    # Heavy penalty for chunks that appear to be just questions without answers
+    question_only_penalty = 0
+    # Check if the chunk ends with a question mark and doesn't have much after it
+    if re.search(r'\?\s*$', chunk.strip()):
+        question_only_penalty = 0.6
+    # Check if the chunk is very similar to the query itself
+    elif is_low_quality_chunk(chunk, query):
+        question_only_penalty = 0.8
+    
+    # Calculate final score with all bonuses and penalties
+    final_score = similarity + keyword_bonus + exact_match_bonus + answer_bonus + numbered_list_bonus + document_link_bonus - length_penalty - question_only_penalty
+    
+    # Ensure the score is positive (minimum score of 0.1 to avoid complete filtering)
+    final_score = max(0.1, final_score)
+    
+    return final_score
 
 def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filename=None):
     """
@@ -456,6 +531,77 @@ def get_greeting_response(text: str) -> str:
     else:
         return "Halo! 👋 Saya adalah asisten virtual Program Studi Sistem Informasi Undiksha. Ada yang bisa saya bantu hari ini?"
 
+def detect_numbered_sequence(chunk):
+    """Detect if a chunk contains numbered points and if it might be truncated."""
+    # Check for numbered list patterns like "1.", "2.", etc.
+    numbered_pattern = r'(\d+)[\.|\)]'
+    matches = re.findall(numbered_pattern, chunk)
+    
+    if not matches:
+        return False, 0, 0
+    
+    # Convert to integers and find min/max numbers
+    numbers = [int(n) for n in matches]
+    min_num = min(numbers)
+    max_num = max(numbers)
+    
+    # If we find a sequence starting with 1, check if it might be truncated
+    if min_num == 1 and max_num >= 3:  # We have at least points 1, 2, 3
+        # Check if the chunk ends with a number that seems to continue
+        last_hundred_chars = chunk[-100:]
+        last_number_match = re.search(r'(\d+)[\.|\)]', last_hundred_chars)
+        if last_number_match:
+            last_number = int(last_number_match.group(1))
+            # If the last number is the max and there's not much text after it, it might be truncated
+            if last_number == max_num and len(last_hundred_chars[last_number_match.end():].strip()) < 50:
+                return True, min_num, max_num
+    
+    return False, min_num, max_num
+
+def is_low_quality_chunk(chunk, query):
+    """Detect if a chunk is low quality (too short or just contains the query)"""
+    # If chunk is extremely short (less than 100 chars), it's probably low quality
+    if len(chunk.strip()) < 100:
+        return True
+        
+    # If the chunk is just the query or very similar to it
+    chunk_lower = chunk.lower().strip()
+    query_lower = query.lower().strip()
+    
+    # Check if chunk is just the query
+    if chunk_lower == query_lower:
+        return True
+    
+    # Check if chunk contains mostly just the query
+    # First normalize both by removing whitespace
+    normalized_chunk = ' '.join(chunk_lower.split())
+    normalized_query = ' '.join(query_lower.split())
+    
+    # If the chunk is less than 30% longer than the query, it's probably just the query
+    if len(normalized_chunk) < len(normalized_query) * 1.3:
+        return True
+        
+    # Check if chunk starts with the query and doesn't have much more content
+    if normalized_chunk.startswith(normalized_query) and len(normalized_chunk) < len(normalized_query) * 1.5:
+        return True
+        
+    return False
+
+def is_document_access_question(text: str) -> bool:
+    """Check if the question is about accessing documents or curriculum."""
+    text_lower = text.lower()
+    
+    # Keywords that indicate questions about documents or curriculum access
+    document_keywords = [
+        "dokumen", "document", "kurikulum", "curriculum", "akses", "access", 
+        "link", "tautan", "unduh", "download", "file", "buku", "buku pedoman",
+        "panduan", "guide", "manual", "handbook", "sillabus", "silabus",
+        "dimana", "where", "how to", "bagaimana cara", "mendapatkan", "get"
+    ]
+    
+    # Check if any document keyword is in the text
+    return any(keyword in text_lower for keyword in document_keywords)
+
 def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     if show_process:
         st.subheader("1. Chunking and Retrieval")
@@ -463,6 +609,9 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
     try:
         # Check if this is a lecturer question
         is_lecturer_query = is_lecturer_question(user_input)
+        
+        # Check if this is a document access question
+        is_document_query = is_document_access_question(user_input)
         
         # For lecturer questions, modify the query to improve retrieval
         query_for_retrieval = user_input
@@ -481,15 +630,33 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
                 if "dosen" not in query_for_retrieval.lower():
                     query_for_retrieval = f"dosen koordinator program studi {query_for_retrieval}"
         
+        # For document access questions, modify the query to improve retrieval
+        if is_document_query:
+            # Make sure we include key terms for document retrieval
+            document_terms = ["kurikulum", "dokumen", "tautan", "link", "drive"]
+            document_terms_present = any(term in query_for_retrieval.lower() for term in document_terms)
+            
+            if not document_terms_present:
+                # Add relevant terms to improve matching with document links
+                query_for_retrieval = f"{query_for_retrieval} dokumen kurikulum tautan drive"
+                logger.info(f"Modified document query: {query_for_retrieval}")
+        
         # Add query expansion with synonyms and related terms
         expanded_query = expand_query(query_for_retrieval)
         logger.info(f"Original query: {query_for_retrieval}")
         logger.info(f"Expanded query: {expanded_query}")
         
-        # Initially fetch more documents (e.g., 50) to have a larger pool to score and filter
+        # Detect if query is about a procedure or process
+        is_procedure = is_procedure_question(query_for_retrieval)
+        
+        # Determine initial retrieval size
+        # If it's a procedure or document access query, retrieve more documents initially
+        initial_k = 100 if is_procedure or is_document_query else 50
+        
+        # Initially fetch more documents to have a larger pool to score and filter
         retrieved_docs = retriever.get_relevant_documents(
             expanded_query, 
-            search_kwargs={"k": 50}
+            search_kwargs={"k": initial_k}
         )
         
         # Check if we got any documents
@@ -499,6 +666,29 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             logger.warning(f"No documents retrieved for query: {query_for_retrieval}")
             return [], None
             
+        total_retrieved = len(retrieved_docs)
+        
+        # Filter out low-quality chunks (too short or just contains the query)
+        filtered_docs = []
+        low_quality_count = 0
+        
+        for doc in retrieved_docs:
+            content = doc.page_content.strip()
+            if not is_low_quality_chunk(content, user_input):
+                filtered_docs.append(doc)
+            else:
+                low_quality_count += 1
+                logger.info(f"Filtered out low-quality chunk: {content[:100]}...")
+        
+        logger.info(f"Filtered out {low_quality_count} low-quality chunks out of {total_retrieved}")
+        
+        # If filtering removed all documents, fall back to the originals
+        if not filtered_docs and retrieved_docs:
+            logger.warning("All chunks were filtered as low-quality, falling back to original chunks")
+            filtered_docs = retrieved_docs
+        
+        # Replace the original retrieved docs with filtered ones
+        retrieved_docs = filtered_docs
         total_retrieved = len(retrieved_docs)
         
         # Deduplicate chunks and keep track of which ones were removed
@@ -700,27 +890,83 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
         # Sort by relevance score in descending order
         embedded_data.sort(key=lambda x: x[1], reverse=True)
         
-        # Now filter out chunks that don't have ANY query terms if we have enough chunks
-        if len(embedded_data) > STANDARD_CHUNK_COUNT and filtered_query_terms:
-            filtered_embedded_data = []
-            remaining_embedded_data = []
+        # Check for numbered sequences in top chunks
+        has_numbered_sequence = False
+        sequence_chunks = []
+        max_number_found = 0
+        
+        # First, check if any of the top chunks contain a numbered sequence
+        for chunk, score in embedded_data[:5]:
+            is_numbered, min_num, max_num = detect_numbered_sequence(chunk)
+            if is_numbered:
+                has_numbered_sequence = True
+                sequence_chunks.append((chunk, score))
+                max_number_found = max(max_number_found, max_num)
+        
+        # If we found a numbered sequence, look for additional chunks that might continue it
+        if has_numbered_sequence and max_number_found >= 3:
+            logger.info(f"Detected numbered sequence up to {max_number_found}, looking for continuation")
             
+            # Look through all chunks to find potential continuations
             for chunk, score in embedded_data:
-                chunk_lower = chunk.lower()
-                # Check if chunk contains at least one important query term
-                has_query_term = any(term in chunk_lower for term in filtered_query_terms)
+                # Skip chunks we already identified
+                if (chunk, score) in sequence_chunks:
+                    continue
                 
-                if has_query_term:
-                    filtered_embedded_data.append((chunk, score))
-                else:
-                    remaining_embedded_data.append((chunk, score))
+                # Look for higher numbers in this chunk
+                next_number = max_number_found + 1
+                continued_numbered_pattern = r'(' + str(next_number) + r')[\.|\)]'
+                if re.search(continued_numbered_pattern, chunk):
+                    sequence_chunks.append((chunk, score))
+                    logger.info(f"Found continuation of numbered sequence in chunk")
+                
+                # Also check for chunks that contain numbers greater than our current max
+                _, _, chunk_max = detect_numbered_sequence(chunk)
+                if chunk_max > max_number_found:
+                    sequence_chunks.append((chunk, score))
+                    max_number_found = chunk_max
+                    logger.info(f"Found higher numbered sequence (up to {max_number_found}) in another chunk")
+        
+        # If we found sequence chunks, prioritize them
+        if sequence_chunks:
+            # Sort sequence chunks by score
+            sequence_chunks.sort(key=lambda x: x[1], reverse=True)
             
-            # If we have enough chunks with query terms, use only those
-            if len(filtered_embedded_data) >= 5:  # Ensure we have at least 5 relevant chunks
-                embedded_data = filtered_embedded_data
-            else:
-                # Otherwise, use filtered chunks first, then add the best remaining chunks
-                embedded_data = filtered_embedded_data + remaining_embedded_data
+            # Replace the standard filtering with our sequence-aware approach
+            filtered_embedded_data = sequence_chunks
+            
+            # Add other high-scoring chunks that didn't match our sequence pattern
+            for chunk, score in embedded_data:
+                if (chunk, score) not in sequence_chunks:
+                    filtered_embedded_data.append((chunk, score))
+                    
+                    # Stop once we have enough total chunks
+                    if len(filtered_embedded_data) >= STANDARD_CHUNK_COUNT:
+                        break
+            
+            embedded_data = filtered_embedded_data
+        else:
+            # Now filter out chunks that don't have ANY query terms if we have enough chunks
+            if len(embedded_data) > STANDARD_CHUNK_COUNT and filtered_query_terms:
+                filtered_embedded_data = []
+                remaining_embedded_data = []
+                
+                for chunk, score in embedded_data:
+                    chunk_lower = chunk.lower()
+                    # Check if chunk contains at least one important query term
+                    has_query_term = any(term in chunk_lower for term in filtered_query_terms)
+                    
+                    if has_query_term:
+                        filtered_embedded_data.append((chunk, score))
+                    else:
+                        remaining_embedded_data.append((chunk, score))
+                
+                # If we have enough chunks with query terms, use only those
+                if len(filtered_embedded_data) >= 5:  # Ensure we have at least 5 relevant chunks
+                    embedded_data = filtered_embedded_data
+                else:
+                    # Otherwise, use filtered chunks first, then add the best remaining chunks
+                    embedded_data = filtered_embedded_data + remaining_embedded_data
         
         # Trim to standard count
         embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
