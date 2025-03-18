@@ -210,67 +210,27 @@ def calculate_relevance_scores(chunk, query):
     # Calculate cosine similarity
     similarity = cosine_similarity([chunk_embedding], [query_embedding])[0][0]
     
-    # Add a much stronger bonus score for keyword matches
+    # Add a much stronger bonus score for keyword matches (increased from 0.2 to 0.5)
     query_keywords = set(query.lower().split())
-    
-    # Skip stopwords and question words for better matching
+    # Skip stopwords for better matching
     stopwords = {
         'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
         'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
         'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
-        'ada', 'adalah', 'merupakan', 'ini', 'itu',
-        # Adding question words to exclude as they're not important for matching
-        'bagaimana', 'apa', 'mengapa', 'siapa', 'how', 'what', 'why', 'who', 'where', 'when'
+        'ada', 'adalah', 'merupakan', 'ini', 'itu'
     }
-    
-    # Extract content terms, removing stopwords and question words
     query_keywords = {kw for kw in query_keywords if kw not in stopwords and len(kw) > 2}
-    
-    # Add specific academic domain terms from the query
-    academic_terms = extract_academic_terms(query.lower())
-    query_keywords.update(academic_terms)
-    
     chunk_lower = chunk.lower()
     
     # Calculate what percentage of query keywords are in the chunk
-    keyword_matches = 0
-    matched_keywords = []
-    for keyword in query_keywords:
-        # Check for exact match
-        if keyword in chunk_lower:
-            keyword_matches += 1
-            matched_keywords.append(keyword)
-        # Also check for partial matches for longer keywords (useful for academic terms)
-        elif len(keyword) > 5 and any(part in chunk_lower for part in [keyword[:5], keyword[-5:]]):
-            keyword_matches += 0.5
-            matched_keywords.append(keyword)
+    keyword_matches = sum(1 for keyword in query_keywords if keyword in chunk_lower)
+    keyword_bonus = 0.5 * (keyword_matches / len(query_keywords)) if query_keywords else 0
     
-    # Add a very high bonus for academic keyword matches
-    keyword_bonus = 0.9 * (keyword_matches / len(query_keywords)) if query_keywords else 0
-    
-    # Add an exact match bonus for multi-word phrases
+    # Add an exact match bonus for multi-word phrases (increased from 0.3 to 0.5)
     exact_match_bonus = 0
     if len(query) > 3:  # Only for non-trivial queries
         if query.lower() in chunk_lower:
-            exact_match_bonus = 0.7
-        # Partial multi-word matching
-        elif len(query.split()) >= 3:
-            # Check for 2-3 word sequences from the query
-            words = query.lower().split()
-            for i in range(len(words) - 2):
-                # Try three-word phrases
-                if i + 2 < len(words):
-                    three_word = f"{words[i]} {words[i+1]} {words[i+2]}"
-                    if three_word in chunk_lower:
-                        exact_match_bonus = 0.5
-                        break
-                
-                # Try two-word phrases if three-word not found
-                two_word = f"{words[i]} {words[i+1]}"
-                if two_word in chunk_lower:
-                    exact_match_bonus = 0.3
-                    if exact_match_bonus < 0.5:  # Don't override higher bonus
-                        break
+            exact_match_bonus = 0.5
     
     # Add a proximity bonus for multi-word queries
     proximity_bonus = 0
@@ -284,66 +244,10 @@ def calculate_relevance_scores(chunk, query):
         
         # Normalize and scale the proximity bonus
         if proximity_count > 0:
-            proximity_bonus = 0.4 * min(proximity_count / (len(query_keywords) - 1), 1.0)
+            proximity_bonus = 0.3 * min(proximity_count / (len(query_keywords) - 1), 1.0)
     
     # Return combined score with all bonuses
     return similarity + keyword_bonus + exact_match_bonus + proximity_bonus
-
-def extract_academic_terms(query):
-    """Extract important academic domain-specific terms from the query"""
-    # Key academic terms to look for
-    academic_terms = set()
-    
-    # Academic domain term categories
-    academic_categories = {
-        "program_terms": [
-            "sistem informasi", "si", "program studi", "prodi", "jurusan", 
-            "undiksha", "informatika", "teknik", "universitas", "pendidikan", "ganesha"
-        ],
-        "academic_processes": [
-            "skripsi", "magang", "penelitian", "kkn", "mbkm", "tugas akhir", "ujian", 
-            "sidang", "proposal", "seminar", "revisi", "pengajuan", "kerja praktik"
-        ],
-        "curriculum_terms": [
-            "kurikulum", "matakuliah", "mata kuliah", "sks", "semester", "kelas", 
-            "perkuliahan", "konsentrasi", "peminatan", "silabus", "rps"
-        ],
-        "administrative_terms": [
-            "pendaftaran", "pembayaran", "registrasi", "heregistrasi", "ukt", "bkt",
-            "cuti", "beasiswa", "biaya", "spp", "administrasi", "formulir", "dokumen"
-        ],
-        "academic_roles": [
-            "dosen", "koorprodi", "koordinator", "pembimbing", "penguji", "kaprodi",
-            "mahasiswa", "dekan", "rektor", "pa", "akademik"
-        ]
-    }
-    
-    # Extract query terms based on academic categories
-    for category, terms in academic_categories.items():
-        for term in terms:
-            if term in query:
-                academic_terms.add(term)
-    
-    # Special handling for multi-word terms that may be partially matched
-    # For example, if query contains "cara mengajukan skripsi", we want to identify "pengajuan skripsi"
-    academic_phrases = [
-        "pengajuan skripsi", "pendaftaran sidang", "ujian proposal", "pengesahan laporan",
-        "pertukaran pelajar", "fast track", "credit transfer", "pembimbing akademik",
-        "merdeka belajar", "cuti akademik", "beasiswa bidikmisi", "kelas internasional",
-        "mata kuliah lintas prodi", "mata kuliah wajib umum", "badan usaha", "karya akhir",
-        "permohonan pengesahan", "program magang", "konsentrasi peminatan", "kurikulum undiksha",
-        "program pertukaran", "full credit", "inbound", "outbound", "laporan skripsi"
-    ]
-    
-    for phrase in academic_phrases:
-        words = phrase.split()
-        # Check if any two consecutive words from the phrase appear in the query
-        for i in range(len(words) - 1):
-            if f"{words[i]} {words[i+1]}" in query:
-                academic_terms.add(phrase)
-                break
-    
-    return academic_terms
 
 def export_retrieval_to_csv(user_query, query_embedding, retrieved_data, filename=None):
     """
@@ -626,7 +530,7 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             unique_docs.append(doc)
         
         # Standard number of chunks to show
-        STANDARD_CHUNK_COUNT = 12
+        STANDARD_CHUNK_COUNT = 10
         
         # If we don't have enough unique chunks, process and add more
         if len(unique_docs) < STANDARD_CHUNK_COUNT:
@@ -688,24 +592,10 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             filtered_embedded_data = []
             remaining_embedded_data = []
             
-            # Add academic terms to the filtered query terms
-            academic_terms = extract_academic_terms(user_input.lower())
-            enhanced_query_terms = filtered_query_terms.union(academic_terms)
-            
             for chunk, score in embedded_data:
                 chunk_lower = chunk.lower()
                 # Check if chunk contains at least one important query term
-                has_query_term = False
-                
-                # Look for any of the enhanced query terms
-                for term in enhanced_query_terms:
-                    if term in chunk_lower:
-                        has_query_term = True
-                        break
-                    # Also check for partial matches in longer terms
-                    elif len(term) > 5 and any(part in chunk_lower for part in [term[:5], term[-5:]]):
-                        has_query_term = True
-                        break
+                has_query_term = any(term in chunk_lower for term in filtered_query_terms)
                 
                 if has_query_term:
                     filtered_embedded_data.append((chunk, score))
@@ -718,61 +608,7 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             else:
                 # Otherwise, use filtered chunks first, then add the best remaining chunks
                 embedded_data = filtered_embedded_data + remaining_embedded_data
-                
-        # Increase diversity and relevance by boosting certain chunks
-        if len(embedded_data) > 3:
-            # Get the first chunk's score
-            top_score = embedded_data[0][1]
-            adjusted_data = []
-            
-            # Make sure we have multiple good chunks by boosting 2nd and 3rd chunks
-            # This ensures more than just the first chunk is highly relevant
-            for i, (chunk, score) in enumerate(embedded_data):
-                if i == 1:  # Boost 2nd chunk
-                    # Bring second chunk closer to first (at least 85% of top score)
-                    min_score = 0.85 * top_score
-                    if score < min_score:
-                        score = min_score
-                elif i == 2:  # Boost 3rd chunk
-                    # Bring third chunk closer to first (at least 80% of top score)
-                    min_score = 0.80 * top_score
-                    if score < min_score:
-                        score = min_score
-                
-                adjusted_data.append((chunk, score))
-            
-            # Re-sort after adjustments
-            adjusted_data.sort(key=lambda x: x[1], reverse=True)
-            embedded_data = adjusted_data
         
-        # Enforce diversity in results by penalizing similar chunks
-        if len(embedded_data) > 5:
-            diverse_data = [embedded_data[0]]  # Always keep the top result
-            chunk_vectors = [model.encode(embedded_data[0][0])]
-            
-            # Process remaining chunks
-            for i in range(1, len(embedded_data)):
-                chunk, score = embedded_data[i]
-                chunk_vector = model.encode(chunk)
-                
-                # Check similarity with already selected chunks
-                max_similarity = max(cosine_similarity([chunk_vector], [v])[0][0] for v in chunk_vectors)
-                
-                # If too similar to an existing chunk, reduce score
-                if max_similarity > 0.9:  # Very similar chunks
-                    adjusted_score = score * 0.6  # Significant penalty
-                elif max_similarity > 0.8:  # Moderately similar
-                    adjusted_score = score * 0.8  # Mild penalty
-                else:
-                    adjusted_score = score  # Keep score as is
-                
-                diverse_data.append((chunk, adjusted_score))
-                chunk_vectors.append(chunk_vector)
-            
-            # Re-sort after adjusting scores
-            diverse_data.sort(key=lambda x: x[1], reverse=True)
-            embedded_data = diverse_data
-            
         # Trim to standard count
         embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
         
@@ -891,20 +727,14 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
     if query:
         # Extract important terms (remove stopwords)
         query_terms = set(query.lower().split())
-        # Common stopwords and question words in English and Indonesian
+        # Common stopwords in English and Indonesian
         stopwords = {
             'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
             'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
             'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
-            'ada', 'adalah', 'merupakan', 'ini', 'itu',
-            # Adding question words to exclude from highlighting
-            'bagaimana', 'apa', 'mengapa', 'siapa', 'how', 'what', 'why', 'who', 'where', 'when'
+            'ada', 'adalah', 'merupakan', 'ini', 'itu'
         }
         query_terms = {term for term in query_terms if term not in stopwords and len(term) > 2}
-        
-        # Add academic terms for highlighting
-        academic_terms = extract_academic_terms(query.lower())
-        query_terms.update(academic_terms)
     
     # Function to highlight query terms in chunk text
     def highlight_query_terms(text, terms):
@@ -913,32 +743,12 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             
         # Create a version of the text with highlighted terms
         highlighted_text = text
-        
-        # First try exact matches
         for term in sorted(terms, key=len, reverse=True):  # Process longer terms first
             # Pattern to match whole words only
             pattern = r'\b' + re.escape(term) + r'\b'
             replacement = f"**{term}**"  # Bold for markdown
             highlighted_text = re.sub(pattern, replacement, highlighted_text, flags=re.IGNORECASE)
-        
-        # Then try partial matches for longer terms
-        for term in [t for t in terms if len(t) > 5]:
-            # Only consider terms that weren't already highlighted
-            if f"**{term}**" not in highlighted_text:
-                # Try matching term prefixes and suffixes
-                prefix = term[:5]
-                suffix = term[-5:]
-                
-                # Find words containing these parts
-                words = set(re.findall(r'\b\w+\b', highlighted_text))
-                for word in words:
-                    if (prefix in word.lower() or suffix in word.lower()) and len(word) > 5:
-                        # Only if not already highlighted
-                        if f"**{word}**" not in highlighted_text:
-                            pattern = r'\b' + re.escape(word) + r'\b'
-                            replacement = f"**{word}**"  # Bold for markdown
-                            highlighted_text = re.sub(pattern, replacement, highlighted_text, flags=re.IGNORECASE)
-        
+            
         return highlighted_text
     
     # Process embedded data to clean chunks
@@ -949,7 +759,7 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
     
     # Display original question and its embedding if available
     if query is not None and query_embedding is not None:
-        # st.subheader("Question Embedding")
+        st.subheader("Question Embedding")
         
         # Show the original question
         st.markdown("**Pertanyaan Asli**")
@@ -1281,7 +1091,7 @@ def format_response(answer, is_english=False):
     """
     # Add greeting based on the content
     if "skripsi" in answer.lower() or "thesis" in answer.lower():
-        greeting = "Salam Harmoni, " if not is_english else "Alright, "
+        greeting = "Salam Harmoni, saya akan menjelaskan tentang proses skripsi. " if not is_english else "Alright, let me explain about the thesis process. "
     else:
         greeting = "Salam Harmoni, " if not is_english else "Alright, "
     # Combine all parts
@@ -1559,11 +1369,26 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Force light theme
+    # Theme-aware CSS that respects light/dark mode
     st.markdown("""
         <style>
-        .stApp {
-            background-color: #FFFFFF;
+        /* Preserve default Streamlit theme background values based on current theme */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        
+        /* Custom styling for chat elements that respects theme */
+        .chat-message {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+        }
+        
+        /* Custom styling for user input area that works in both themes */
+        .stTextInput > div > div > input {
+            border-radius: 20px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -1733,6 +1558,16 @@ def main():
         # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         
+        # Display the user message immediately
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            
+            # Show a temporary loading message while processing
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
+                message_placeholder.markdown("⏳ Sedang memproses...")
+        
         # Set flag that we're processing a new question
         st.session_state.processing_new_question = True
         
@@ -1772,6 +1607,9 @@ def main():
         
         # Generate response
         answer = generation(user_input, show_process)
+        
+        # Update the placeholder with the actual response
+        message_placeholder.markdown(answer)
         
         # Store the latest answer
         st.session_state.dev_mode_latest_answer = answer
