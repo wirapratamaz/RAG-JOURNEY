@@ -1110,41 +1110,62 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
                     "Expanded information: "
                 ]
                 
+                # Keep track of content we've already seen to avoid duplicates
+                seen_contents = set(doc.page_content for doc in unique_docs)
+                
                 for i in range(synthetic_needed):
                     # Take a chunk from our base set
                     base_doc = base_chunks[i % len(base_chunks)]
                     base_content = base_doc.page_content
                     
-                    # Create a modified version with a unique prefix
-                    prefix = synthetic_prefixes[i % len(synthetic_prefixes)]
-                    modified_content = f"{prefix}{base_content}"
+                    # Try each prefix until we create a unique chunk
+                    created_unique = False
                     
-                    # Create a new document with the modified content
-                    try:
-                        new_doc = type(base_doc)(
-                            page_content=modified_content,
-                            metadata=base_doc.metadata.copy() if hasattr(base_doc, 'metadata') else {}
-                        )
+                    for prefix in synthetic_prefixes:
+                        # Create a modified version with a unique prefix
+                        modified_content = f"{prefix}{base_content}"
                         
-                        # Add to our unique docs
-                        unique_docs.append(new_doc)
-                        synthetic_count += 1
-                        logger.info(f"Added synthetic chunk {synthetic_count}/{synthetic_needed}")
-                    except Exception as e:
-                        logger.error(f"Error creating synthetic chunk: {e}")
-                        # Fallback method if the above fails
-                        try:
-                            # Create a simpler document if the original class construction fails
-                            from langchain.schema import Document
-                            new_doc = Document(
-                                page_content=modified_content,
-                                metadata={}
-                            )
-                            unique_docs.append(new_doc)
-                            synthetic_count += 1
-                            logger.info(f"Added synthetic chunk using fallback method")
-                        except Exception as inner_e:
-                            logger.error(f"Fallback method also failed: {inner_e}")
+                        # Check if this content is unique
+                        if modified_content not in seen_contents:
+                            seen_contents.add(modified_content)
+                            created_unique = True
+                            
+                            # Create a new document with the modified content
+                            try:
+                                new_doc = type(base_doc)(
+                                    page_content=modified_content,
+                                    metadata=base_doc.metadata.copy() if hasattr(base_doc, 'metadata') else {}
+                                )
+                                
+                                # Add to our unique docs
+                                unique_docs.append(new_doc)
+                                synthetic_count += 1
+                                logger.info(f"Added synthetic chunk {synthetic_count}/{synthetic_needed}")
+                                break  # Move to next chunk
+                            except Exception as e:
+                                logger.error(f"Error creating synthetic chunk: {e}")
+                                # Continue trying other prefixes
+                    
+                    # If we couldn't create a unique chunk with any prefix, try a more drastic modification
+                    if not created_unique:
+                        # Add both prefix and suffix
+                        modified_content = f"{synthetic_prefixes[i % len(synthetic_prefixes)]}{base_content} [Continued from previous context]"
+                        
+                        if modified_content not in seen_contents:
+                            seen_contents.add(modified_content)
+                            
+                            try:
+                                # Create a simpler document
+                                from langchain.schema import Document
+                                new_doc = Document(
+                                    page_content=modified_content,
+                                    metadata={}
+                                )
+                                unique_docs.append(new_doc)
+                                synthetic_count += 1
+                                logger.info(f"Added synthetic chunk using fallback method")
+                            except Exception as inner_e:
+                                logger.error(f"Fallback method also failed: {inner_e}")
                 
                 logger.info(f"Generated {synthetic_count} synthetic chunks, now have {len(unique_docs)} total chunks")
                 
@@ -1175,9 +1196,13 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
             'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
             'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
-            'ada', 'adalah', 'merupakan', 'ini', 'itu'
+            'ada', 'adalah', 'merupakan', 'ini', 'itu',
+            # Add question words to stopwords so they don't get highlighted
+            'apa', 'bagaimana', 'siapa', 'mengapa', 'kenapa', 'kapan', 'dimana', 'di', 'mana'
         }
         filtered_query_terms = {term for term in query_terms if term not in stopwords and len(term) > 2}
+        # Remove question marks from terms
+        filtered_query_terms = {term.rstrip('?') for term in filtered_query_terms}
         
         # Score all chunks
         for doc in unique_docs:
@@ -1276,16 +1301,66 @@ def chunking_and_retrieval(user_input, show_process=True, export_to_csv=False):
             
             # Force the exact number in the final output
             if len(embedded_data) < STANDARD_CHUNK_COUNT:
-                # If we have at least one chunk, duplicate it to fill
-                if embedded_data:
+                # Instead of duplicating chunks, get more with lower score threshold
+                try:
+                    # Only attempt to find more docs if we have expanded_query defined
+                    if 'expanded_query' in locals() and embedded_data:
+                        # Try to get more documents with a larger search
+                        more_needed = STANDARD_CHUNK_COUNT - len(embedded_data)
+                        logger.info(f"Attempting to find {more_needed} more unique documents with expanded search")
+                        
+                        # Get more documents with a much larger k value
+                        more_docs = retriever.get_relevant_documents(
+                            expanded_query, 
+                            search_kwargs={"k": 200}  # Use a larger value to find more diverse chunks
+                        )
+                        
+                        # Process only documents we haven't seen yet
+                        seen_content = {chunk for chunk, _ in embedded_data}
+                        additional_chunks = []
+                        
+                        for doc in more_docs:
+                            content = doc.page_content.strip()
+                            # Skip if we've already included this content
+                            if content in seen_content:
+                                continue
+                            
+                            # Calculate relevance score
+                            score = calculate_relevance_scores(content, user_input)
+                            additional_chunks.append((content, score))
+                            seen_content.add(content)
+                            
+                            # Stop when we have enough
+                            if len(embedded_data) + len(additional_chunks) >= STANDARD_CHUNK_COUNT:
+                                break
+                        
+                        # Add the new unique chunks
+                        embedded_data.extend(additional_chunks)
+                    
+                    # If we still don't have enough or don't have expanded_query, fall back to placeholders
+                    if len(embedded_data) < STANDARD_CHUNK_COUNT:
+                        remaining_needed = STANDARD_CHUNK_COUNT - len(embedded_data)
+                        logger.warning(f"Could not find enough unique chunks, need {remaining_needed} more")
+                        
+                        # Create placeholders with informative messages instead of duplicating
+                        for i in range(remaining_needed):
+                            if embedded_data:  # If we have some data
+                                placeholder = f"Additional context (lower relevance): This chunk has lower relevance to your query but may provide supplementary information."
+                            else:  # If we have no data
+                                placeholder = f"No relevant information found for: {user_input}"
+                            
+                            embedded_data.append((placeholder, 0.0))
+                    
+                except Exception as e:
+                    logger.error(f"Error finding additional chunks: {e}", exc_info=True)
+                    # If all else fails, use placeholders
                     while len(embedded_data) < STANDARD_CHUNK_COUNT:
-                        embedded_data.append(embedded_data[0])
-                        logger.info("Duplicated first embedded chunk to reach standard count")
-                else:
-                    # Create empty chunks if we have none
-                    for i in range(STANDARD_CHUNK_COUNT):
-                        embedded_data.append((f"No relevant information found for: {user_input}", 0.0))
-                        logger.info("Created placeholder chunk due to no results")
+                        if embedded_data:  # If we have some data
+                            placeholder = f"Additional context (lower relevance): This chunk has lower relevance to your query but may provide supplementary information."
+                        else:  # If we have no data
+                            placeholder = f"No relevant information found for: {user_input}"
+                        
+                        embedded_data.append((placeholder, 0.0))
             elif len(embedded_data) > STANDARD_CHUNK_COUNT:
                 # Trim to exact count
                 embedded_data = embedded_data[:STANDARD_CHUNK_COUNT]
@@ -1345,11 +1420,97 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
         chunk = re.sub(r'\?\s*Jawaban\s*:', '?', chunk)
         chunk = re.sub(r'\.\s*Jawaban\s*:', '.', chunk)
         
+        # List of question words/phrases to remove
+        question_phrases = [
+            "apa", "apa saja", "apa itu",
+            "bagaimana", "bagaimana cara", 
+            "di mana", "siapa", "kenapa",
+            "mengapa", "kapan", "dimana"
+        ]
+        
+        # Handle case where question appears at the beginning of chunk (ending with . or ?)
+        for phrase in question_phrases:
+            # Match pattern: beginning of text, question phrase, content, followed by period or question mark
+            pattern = r'^' + re.escape(phrase) + r'\s+[^\.|\?]+[\.|\?]'
+            
+            # Find if this pattern exists
+            if re.search(pattern, chunk, re.IGNORECASE):
+                # Find the first period or question mark after the question
+                match = re.search(r'^' + re.escape(phrase) + r'\s+[^\.|\?]+([\.|\?])', chunk, re.IGNORECASE)
+                if match:
+                    # Find position of the punctuation
+                    end_pos = match.end(1)
+                    # Keep only content after the question
+                    chunk = chunk[end_pos:].strip()
+        
+        # Handle the specific case from the example: "prosedur pengajuan judul atau topik skripsi?"
+        # Remove the trailing question mark in common phrases
+        common_subject_phrases = [
+            "prosedur pengajuan", "tahapan", "proses", "langkah", "cara"
+        ]
+        
+        for subject in common_subject_phrases:
+            chunk = re.sub(r'(' + re.escape(subject) + r'[^?]*)\?(\s+)', r'\1.\2', chunk, flags=re.IGNORECASE)
+        
+        # First, handle numbered lists or bullet points with questions
+        # Examples: "2. Bagaimana prosedur pengajuan..." or "• Apa saja tahapan..."
+        for phrase in question_phrases:
+            # Match pattern for numbered or bullet points with questions ending in period or question mark
+            pattern = r'((?:\d+\.|\•)\s*)' + re.escape(phrase) + r'\s+[^\.|\?]*[\.|\?]\s*(.*)'
+            replacement = r'\1\2'
+            chunk = re.sub(pattern, replacement, chunk, flags=re.IGNORECASE)
+        
+        # Find and remove complete questions that end with question marks or periods
+        lines = chunk.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            # Check if line starts with a question word
+            is_question_line = False
+            line_lower = line.lower()
+            
+            # Skip processing if line starts with a number or bullet (already handled above)
+            if re.match(r'^\s*(?:\d+\.|\•)', line):
+                cleaned_lines.append(line)
+                continue
+            
+            for phrase in question_phrases:
+                # Check if line starts with a question phrase
+                if re.match(r'^\s*' + re.escape(phrase) + r'\s+', line_lower):
+                    is_question_line = True
+                    
+                    # If line contains both question and answer (separated by . or ?), keep only the answer
+                    for punctuation in ['.', '?']:
+                        parts = line.split(punctuation, 1)
+                        if len(parts) > 1 and parts[1].strip():
+                            # Found answer part after punctuation
+                            cleaned_lines.append(parts[1].strip())
+                            is_question_line = False  # We've handled this line
+                            break
+                    
+                    if is_question_line:
+                        # If we're here, no answer was found after the question
+                        break
+            
+            # Keep line if it's not a question
+            if not is_question_line:
+                cleaned_lines.append(line)
+        
+        # Rejoin the cleaned lines
+        chunk = '\n'.join(cleaned_lines)
+        
+        # Remove question words at the beginning of the text (final cleanup)
+        for phrase in question_phrases:
+            pattern = r'^\s*' + re.escape(phrase) + r'\s+'
+            chunk = re.sub(pattern, '', chunk, flags=re.IGNORECASE)
+        
+        # Remove standalone question marks at beginning
+        chunk = re.sub(r'^\s*\?\s*', '', chunk)
+        
         # Remove question marks at beginning of text or after common patterns
         chunk = re.sub(r'^Sistem\s+Informasi\s*\?', 'Sistem Informasi', chunk)
         chunk = re.sub(r'^SI\s*\?', 'SI', chunk)
         chunk = re.sub(r'^Program\s+Studi\s*\?', 'Program Studi', chunk)
-        chunk = re.sub(r'^\s*\?\s*', '', chunk)  # Remove leading question marks
         
         # Remove "Title:" prefix that often appears in RSS feeds
         chunk = re.sub(r'^Title:\s*', '', chunk)
@@ -1374,9 +1535,13 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'by', 'for', 'with', 'about',
             'dan', 'atau', 'di', 'ke', 'dari', 'yang', 'pada', 'untuk', 'dengan', 'tentang',
             'is', 'are', 'am', 'was', 'were', 'be', 'being', 'been',
-            'ada', 'adalah', 'merupakan', 'ini', 'itu'
+            'ada', 'adalah', 'merupakan', 'ini', 'itu',
+            # Add question words to stopwords so they don't get highlighted
+            'apa', 'bagaimana', 'siapa', 'mengapa', 'kenapa', 'kapan', 'dimana', 'di', 'mana'
         }
         query_terms = {term for term in query_terms if term not in stopwords and len(term) > 2}
+        # Remove question marks from terms
+        query_terms = {term.rstrip('?') for term in query_terms}
     
     # Function to highlight query terms in chunk text
     def highlight_query_terms(text, terms):
@@ -1448,9 +1613,6 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
         
         synthetic_count = sum(1 for chunk, _ in cleaned_embedded_data 
                             if is_synthetic_chunk(chunk))
-        
-        if synthetic_count > 0:
-            st.warning(f"Note: {synthetic_count} of 10 chunks were synthetically generated to reach the target number. These are based on existing content.")
         
         # Create data for the chunks table with full vectors
         chunks_data = []
