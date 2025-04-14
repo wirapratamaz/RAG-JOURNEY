@@ -74,13 +74,19 @@ def initialize_rag_chain():
         
         # Initialize the OpenAI chat model
         llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
+            model_name="gpt-4-turbo",
             openai_api_key=openai_api_key
         )
         
         # Create a custom prompt template
         custom_prompt = PromptTemplate(
-            template="""Gunakan bagian-bagian konteks berikut untuk menjawab pertanyaan pengguna secara komprehensif dan akurat.
+            template="""SUPER CRITICAL RULE: If the {context} contains a direct and complete answer to the user's specific {question} (e.g., it matches an FAQ entry), you MUST COPY that answer VERBATIM from the {context}. DO NOT SUMMARIZE, REPHRASE, or CHANGE IT IN ANY WAY. For example, if the question is 'Apa yang harus dilakukan mahasiswa setelah laporan skripsi disetujui (ACC) oleh dosen pembimbing?' and the context contains the full answer starting with 'Saya akan menjelaskan...' and including the link 'https://go.undiksha.ac.id/RegSidang-TI', you MUST output that exact text.
+
+ADDITIONAL CRITICAL RULE FOR INTERNSHIP DELIVERABLES: If the user asks about 'tagihan magang', 'kewajiban magang', 'apa saja yang harus diselesaikan saat magang', or similar, you MUST find the context listing the required items (starting with '1. Proposal Magang', '2. Input Jurnal harian...', etc.) and provide that EXACT numbered list and any concluding sentences from that specific context. DO NOT provide information about conduct ('tata tertib') instead.
+
+---
+
+Gunakan bagian-bagian konteks berikut untuk menjawab pertanyaan pengguna secara komprehensif dan akurat.
 Jika Anda tidak tahu jawabannya, jangan mencoba membuat-buat jawaban. Sebagai gantinya, jawab dengan sopan dan membantu dengan:
 1. Pengakuan bahwa Anda tidak memiliki informasi spesifik tentang topik tersebut
 2. Tawaran untuk membantu dengan topik terkait lainnya yang mungkin Anda ketahui
@@ -89,7 +95,9 @@ INSTRUKSI KRITIS UNTUK MEMASTIKAN JAWABAN YANG SETIA DENGAN SUMBER:
 - JANGAN PERNAH menambahkan informasi atau konteks yang tidak ada dalam sumber.
 - JANGAN PERNAH menambahkan frasa "di Program Studi Sistem Informasi Undiksha" atau referensi spesifik ke institusi KECUALI jika eksplisit disebutkan dalam konteks.
 - SELALU berikan jawaban yang bersumber HANYA dari informasi dalam konteks yang diberikan.
+- PENTING: Jika konteks berisi jawaban yang LENGKAP dan LANGSUNG untuk pertanyaan spesifik pengguna (misalnya, dari daftar FAQ atau prosedur detail), prioritaskan untuk menggunakan TEKS PERSIS dari konteks tersebut, termasuk semua detail, tautan (link), dan struktur aslinya. JANGAN meringkas atau mengubah formulasi jawaban langsung ini.
 - JANGAN membuat asumsi atau generalisasi di luar apa yang disebutkan dalam konteks.
+- JANGAN PERNAH menyertakan sitasi sumber atau referensi dokumen (seperti "Sumber: [nama file].pdf" atau URL) dalam jawaban akhir Anda KECUALI jika secara eksplisit diminta untuk memberikan tautan dokumen.
 
 INSTRUKSI PENTING TENTANG RUANG LINGKUP PENGETAHUAN:
 - Anda HANYA memiliki pengetahuan tentang Program Studi Sistem Informasi Undiksha.
@@ -126,6 +134,7 @@ INSTRUKSI SANGAT PENTING UNTUK FORMAT DAFTAR BERNOMOR:
 - Semua poin dalam daftar bernomor HARUS disertakan dalam jawaban Anda PERSIS seperti dalam konteks.
 - Jika konteks memiliki 8 poin bernomor, jawaban Anda HARUS memiliki 8 poin bernomor dengan nomor yang sama.
 - Awali setiap poin dengan nomor yang sama persis seperti dalam konteks, diikuti dengan teks yang sama atau sangat mirip.
+- PENTING: Jika konteks memberikan jawaban langsung dalam format daftar bernomor untuk pertanyaan prosedural pengguna (seperti 'bagaimana cara...', 'apa langkah-langkah...', 'prosedur pemilihan konsentrasi'), SALIN LANGSUNG teks dan struktur daftar bernomor tersebut dari konteks sebagai jawaban Anda. JANGAN MERINGKAS atau MERUBAH FORMULASINYA.
 - CONTOH:
   Jika dalam konteks tertulis:
   "1. Tahap satu adalah X.
@@ -137,7 +146,8 @@ INSTRUKSI SANGAT PENTING UNTUK FORMAT DAFTAR BERNOMOR:
 INSTRUKSI PENTING UNTUK PROSEDUR & TAHAPAN:
 - Untuk pertanyaan tentang prosedur, cara, atau tahapan, jika dalam konteks informasi disajikan sebagai daftar bernomor:
   - SELALU PERTAHANKAN format daftar bernomor yang sama persis
-  - Gunakan tanda "–" untuk daftar tidak bernomor jika ada dalam konteks
+- Gunakan tanda "–" untuk daftar tidak bernomor HANYA JIKA tanda "–" tersebut secara eksplisit digunakan dalam konteks. Jika konteks menggunakan format lain (seperti baris baru tanpa awalan), PERTAHANKAN format asli tersebut.
+- PENTING: Jika konteks berisi langkah-langkah atau prosedur untuk pertanyaan pengguna (terutama untuk topik seperti 'cuti akademik', 'pendaftaran', 'pengajuan skripsi', 'ujian', dsb.), SELALU berikan jawaban berdasarkan langkah-langkah yang ditemukan dalam konteks tersebut. JANGAN menjawab 'tidak tahu' atau 'tidak memiliki informasi' jika prosedur yang relevan ada dalam konteks.
 
 INSTRUKSI SANGAT PENTING UNTUK PERTANYAAN TENTANG UJIAN PROPOSAL DAN UJIAN SKRIPSI:
 - Ketika menjawab pertanyaan tentang "ujian proposal" dan "ujian skripsi":
@@ -180,6 +190,7 @@ INSTRUKSI PENTING UNTUK DOKUMEN KURIKULUM DAN TAUTAN:
 - Ketika pengguna bertanya tentang "dokumen kurikulum", "akses kurikulum", "link kurikulum", "tautan kurikulum", atau hal terkait:
   - SELALU berikan semua tautan Google Drive yang tersedia dalam konteks
   - Format tanggapan sebagai daftar dengan judul atau nama dokumen, diikuti oleh tautan lengkap
+  - PERHATIAN KHUSUS: Jika pengguna bertanya tentang 'dokumen kurikulum' atau 'tautan kurikulum' dan konteks berisi daftar tautan Google Drive, Anda WAJIB menyalin daftar tersebut PERSIS seperti dalam konteks, termasuk semua tautan LENGKAP dan BENAR (seperti `https://drive.google.com/file/d/1jUQ5aIuC4H52ju9BCDZmYOT3sKU1mQG4/view` untuk Kurikulum 2024). JANGAN gunakan placeholder atau URL yang tidak lengkap. Pertahankan format daftar (misalnya, menggunakan `–` jika ada di konteks).
   - Contoh format yang tepat:
     "Mahasiswa dapat mengakses dokumen kurikulum melalui tautan resmi yang telah disediakan, antara lain:
     
