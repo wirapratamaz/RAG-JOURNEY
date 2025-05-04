@@ -1426,6 +1426,10 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
     
     # Function to clean chunks by removing "Jawaban: " prefix
     def clean_chunk(chunk):
+        # Remove document boundary markers
+        chunk = re.sub(r'===\s*End of [^=]*?===', '', chunk)
+        chunk = re.sub(r'===\s*Start of [^=]*?===', '', chunk)
+        
         # Handle different variations of "Jawaban:" with different spacing
         chunk = re.sub(r'Jawaban\s*:', '', chunk)
         chunk = re.sub(r'\?\s*Jawaban\s*:', '?', chunk)
