@@ -1587,10 +1587,7 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
         st.markdown("**Pertanyaan Asli**")
         st.text(query)
         
-        # Show the query terms that will be highlighted
-        if query_terms:
-            st.markdown("**Kata Kunci yang Akan Disorot:**")
-            st.text(", ".join(sorted(query_terms)))
+        # Show the query terms that will be highlighted - REMOVED THIS SECTION
         
         # Show the full question embedding without truncation
         st.markdown("**Embedding Pertanyaan**")
@@ -1717,7 +1714,7 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             # Add a section to display the full raw text of filtered chunks
             st.subheader("Top Retrieved Content")
             
-            # Format the chunks properly as paragraphs with highlighted query terms
+            # Format the chunks properly as paragraphs (no highlighting)
             formatted_chunks = []
             for i, (chunk, score) in enumerate(filtered_data, 1):
                 # The chunks in filtered_data are already cleaned by clean_chunk function
@@ -1727,8 +1724,8 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
                 # Detect if this is a synthetic chunk
                 is_synthetic = is_synthetic_chunk(chunk)
                 
-                # Highlight query terms
-                highlighted_chunk = highlight_query_terms(cleaned_chunk, query_terms)
+                # Don't apply highlighting to keep text clean
+                highlighted_chunk = cleaned_chunk  # Skip highlighting
                 
                 # Add chunk number and score, with a visual indicator for synthetic chunks
                 if is_synthetic:
@@ -1741,7 +1738,7 @@ def display_embedding_process(embedded_data, query=None, query_embedding=None, t
             # Join the formatted chunks with proper paragraph breaks
             full_content = "\n\n---\n\n".join(formatted_chunks)
             
-            # Display the formatted content with markdown to show highlighting
+            # Display the formatted content with markdown (no highlighting)
             st.markdown(full_content)
         else:
             # Display a message when no chunks are available
