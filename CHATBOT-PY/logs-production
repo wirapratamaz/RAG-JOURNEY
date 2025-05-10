@@ -1,0 +1,61 @@
+Starting Container
+
+INFO:     Will watch for changes in these directories: ['/app']
+
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+
+INFO:     Started reloader process [1] using WatchFiles
+
+INFO:chromadb.telemetry.product.posthog:Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+
+INFO:httpx:HTTP Request: GET https://chroma-production-0925.up.railway.app/api/v2/auth/identity "HTTP/1.1 200 OK"
+
+INFO:chromadb.telemetry.product.posthog:Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+
+INFO:httpx:HTTP Request: GET https://chroma-production-0925.up.railway.app/api/v2/tenants/default_tenant "HTTP/1.1 200 OK"
+
+INFO:httpx:HTTP Request: GET https://chroma-production-0925.up.railway.app/api/v2/tenants/default_tenant/databases/default_database "HTTP/1.1 200 OK"
+
+INFO:app.core.rag_service:Connected to Remote ChromaDB at https://chroma-production-0925.up.railway.app
+
+INFO:httpx:HTTP Request: GET https://chroma-production-0925.up.railway.app/api/v2/tenants/default_tenant/databases/default_database/collections "HTTP/1.1 200 OK"
+
+INFO:app.core.rag_service:Available collections: [Collection(name=standalone_api), Collection(name=faqs_collection)]
+
+INFO:app.core.rag_service:Attempting to use collection: standalone_api
+
+/app/app/core/rag_service.py:97: LangChainDeprecationWarning: The class `Chroma` was deprecated in LangChain 0.2.9 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-chroma package and should be used instead. To use it run `pip install -U :class:`~langchain-chroma` and import as `from :class:`~langchain_chroma import Chroma``.
+
+  self.main_vector_store = Chroma(
+
+INFO:httpx:HTTP Request: POST https://chroma-production-0925.up.railway.app/api/v2/tenants/default_tenant/databases/default_database/collections "HTTP/1.1 200 OK"
+
+INFO:app.core.rag_service:Successfully connected to collection: standalone_api
+
+INFO:app.core.rag_service:Vector store initialized successfully
+
+INFO:app.api.router:RAG Service initialized successfully
+
+INFO:     Started server process [3]
+
+INFO:     Waiting for application startup.
+
+INFO:     Application startup complete.
+
+INFO:     100.64.0.2:45349 - "GET /health HTTP/1.1" 200 OK
+
+INFO:     100.64.0.3:61306 - "OPTIONS /api/query HTTP/1.1" 200 OK
+
+INFO:app.api.router:Received query: Bagaimana cara memilih konsentrasi peminatan dalam program studi ini?
+
+INFO:app.core.rag_service:Processing query: Bagaimana cara memilih konsentrasi peminatan dalam program studi ini?
+
+ERROR:app.api.router:Error processing query: 'RAGService' object has no attribute 'check_for_lecturer_query'
+
+INFO:     100.64.0.3:61306 - "POST /api/query HTTP/1.1" 200 OK
+
+INFO:app.api.router:Received query: Bagaimana cara memilih konsentrasi peminatan dalam program studi ini?
+
+INFO:app.core.rag_service:Processing query: Bagaimana cara memilih konsentrasi peminatan dalam program studi ini?
+
+ERROR:app.api.router:Error processing query: 'RAGService' object has no attribute 'check_for_lecturer_query'

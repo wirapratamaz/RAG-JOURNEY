@@ -160,6 +160,22 @@ class RAGService:
         web_pattern = r'https://[^\s<>"\']+|http://[^\s<>"\']+'
         return re.findall(web_pattern, text)
         
+    def check_for_lecturer_query(self, question: str) -> str:
+        """
+        Check if the query is asking about a specific lecturer and return their information.
+        Returns None if not a lecturer query.
+        """
+        # Convert to lowercase for case-insensitive matching
+        question_lower = question.lower()
+        
+        # Check for lecturer names in the query
+        for lecturer_name, info in LECTURER_INFO.items():
+            if lecturer_name in question_lower:
+                return info
+                
+        # No lecturer match found
+        return None
+        
     def query(self, question: str) -> Dict:
         """Process a query and return the answer"""
         logger.info(f"Processing query: {question}")
