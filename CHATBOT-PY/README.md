@@ -46,7 +46,7 @@ This project is an LLM Chatbot powered by Retrieval-Augmented Generation (RAG). 
 
 2. **Run the Streamlit app:**
    ```bash
-   streamlit run main.py
+   streamlit run app.py
    ```
 
    After running this command, you can view your Streamlit app in your browser at:

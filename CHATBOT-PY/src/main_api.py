@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from scheduler import init_scheduler
 import atexit
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -32,10 +34,32 @@ except Exception as e:
     logger.error(f"Error initializing OpenAI components: {e}")
     raise
 
-from src.api.api import router as api_router
+# Initialize FastAPI app
+app = FastAPI(
+    title="Undiksha RAG Chatbot API",
+    description="API for the RAG-based chatbot for Undiksha University",
+    version="1.0.0"
+)
 
-app = FastAPI()
-app.include_router(api_router, prefix="/api")
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Import and include routers
+from src.api.api import router as main_router
+from src.api.chat_api import router as chat_router
+
+app.include_router(main_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the Undiksha RAG Chatbot API. Use /api/chat for chat functionality."}
 
 # Initialize scheduler when the API starts
 scheduler = init_scheduler()
@@ -44,5 +68,4 @@ scheduler = init_scheduler()
 atexit.register(lambda: scheduler.shutdown())
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("src.main_api:app", host="0.0.0.0", port=8000, reload=True)
