@@ -1,166 +1,101 @@
-# RAG Chatbot
+# Undiksha RAG Chatbot API
 
-## Overview
+A standalone API for the Undiksha RAG-based chatbot, designed for easy deployment.
 
-This project is an LLM Chatbot powered by Retrieval-Augmented Generation (RAG). The tech stack includes Python, Langchain, OpenAI, and Chroma vector store. The chatbot is designed to provide accurate and contextually relevant responses by leveraging external knowledge sources.
+## Features
 
-## Table of Contents
+- FastAPI-based REST API
+- RAG (Retrieval-Augmented Generation) with OpenAI's GPT-4
+- ChromaDB integration for vector storage
+- Environment variable configuration
+- Railway deployment support
 
-1. [Installation](#installation)
-2. [Running the Application](#running-the-application)
-3. [Technology Stack](#technology-stack)
-4. [Logic and Implementation](#logic-and-implementation)
-5. [Documentation](#documentation)
+## Project Structure
 
-## Installation
+```
+.
+├── app/                 # Main application package
+│   ├── api/             # API routes and models
+│   │   ├── models.py    # Pydantic models
+│   │   └── router.py    # API endpoints
+│   └── core/            # Core business logic
+│       └── rag_service.py # RAG implementation
+├── Dockerfile           # Container definition
+├── requirements.txt     # Python dependencies
+├── railway.toml         # Railway configuration
+├── run.py               # Application entry point
+└── README.md            # This file
+```
 
-1. **Clone the repository and navigate to the project directory:**
+## Setup Instructions
+
+### Local Development
+
+1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd path/to/repo
+   cd <repository-directory>
    ```
 
-2. **Create and activate a virtual environment:**
+2. Create and activate a virtual environment:
    ```bash
-   python -m venv myvenv
-   myvenv\Scripts\activate  # On Windows
-   # source myvenv/bin/activate  # On macOS/Linux
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. **Install libraries and dependencies:**
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Get [OpenAI API key](https://platform.openai.com/account/api-keys)**
-
-## Running the Application
-
-1. **Split documents and save to Supabase Vector database (Run once or only when you need to store a document):**
-   ```bash
-   cd src
-   python split_document.py
+4. Create a `.env` file with your configuration:
+   ```
+   OPENAI_API_KEY=your-openai-api-key
+   CHROMA_URL=your-chroma-db-url
+   CHROMA_TOKEN=your-chroma-db-token
+   PORT=8000
    ```
 
-   If the operation is successful, you should see a `Success!` message.
-
-2. **Run the Streamlit app:**
+5. Run the API:
    ```bash
-   streamlit run app.py
+   python run.py
    ```
 
-   After running this command, you can view your Streamlit app in your browser at:
-   - Local URL: `http://localhost:8501`
-   - Network URL: `http://192.168.18.16:8501` (or your local network IP)
+The API will be available at `http://localhost:8000`.
 
-## Technology Stack
+### Deployment on Railway
 
-- **Langchain**: A framework for building applications with large language models. It provides tools for managing prompts, chains, and memory.
-- **Chroma**: A vector store used to store and retrieve document embeddings efficiently.
-- **Streamlit**: A web application framework for creating interactive applications with Python.
-- **OpenAI**: Provides the language model API used for generating responses.
+1. Create a new Railway project.
 
-## Logic and Implementation
+2. Add the repository to your Railway project.
 
-### Retrieval-Augmented Generation (RAG)
+3. Set up the environment variables in the Railway dashboard:
+   - `OPENAI_API_KEY`
+   - `CHROMA_URL`
+   - `CHROMA_TOKEN`
 
-RAG is a technique that enhances the performance of LLMs by retrieving relevant documents from a knowledge base and using them as context for generating responses. This approach reduces the need for fine-tuning and allows for more agile updates to the knowledge base.
+4. Deploy the application.
 
-### Langchain
+Railway will automatically build and deploy the API using the configuration in `railway.toml`.
 
-Langchain is used to manage the conversational flow and retrieval logic. It integrates with OpenAI's API to generate responses based on the retrieved context.
+## API Endpoints
 
-### Chroma
+- `GET /` - Welcome message
+- `GET /health` - Health check endpoint
+- `POST /api/query` - Process a query using the RAG system
 
-Chroma is used to store document embeddings. It allows for efficient retrieval of relevant documents based on user queries.
+### Query Example
 
-### Streamlit
+```bash
+curl -X POST "http://localhost:8000/api/query" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the internship procedure at Undiksha?"}'
+```
 
-Streamlit is used to create the user interface for the chatbot. It provides an interactive platform for users to input queries and receive responses.
-
-### OpenAI
-
-OpenAI's API is used to generate responses. The model is configured to use the `gpt-3.5-turbo` variant, which provides high-quality conversational capabilities.
-
-## Documentation
-
-For more detailed documentation, refer to the following resources:
-
-- [Streamlit Docs](https://docs.streamlit.io/get-started)
-- [Langchain Python Docs](https://python.langchain.com/v0.2/docs/introduction/)
-- [Langchain Conversational RAG Docs](https://python.langchain.com/v0.2/docs/tutorials/qa_chat_history/)
-
-## Deployment to Streamlit Community Cloud
-
-To deploy this application to Streamlit Community Cloud, follow these steps:
-
-1. **Create a GitHub repository** for your project if you haven't already.
-
-2. **Push your code to GitHub**:
-   ```bash
-   git add .
-   git commit -m "Prepare for Streamlit deployment"
-   git push origin main
-   ```
-
-3. **Sign in to Streamlit Community Cloud**:
-   - Go to [Streamlit Community Cloud](https://share.streamlit.io/)
-   - Sign in with your GitHub account
-
-4. **Deploy your app**:
-   - Click "New app"
-   - Select your GitHub repository
-   - Set the main file path to one of:
-     - `streamlit_app.py` (Main app with full functionality)
-     - `simple_app.py` (Simplified version if you encounter issues)
-     - `debug_app.py` (Diagnostic app if you need to troubleshoot)
-   - Click "Deploy"
-
-5. **Set up secrets**:
-   - In the Streamlit Cloud dashboard, find your app
-   - Click on "Settings" > "Secrets"
-   - Add your OpenAI API key and any other required secrets:
-     ```
-     OPENAI_API_KEY = "your-openai-api-key"
-     ```
-
-6. **Advanced settings** (if needed):
-   - You can specify Python version, packages, or other requirements in the Advanced settings section
-
-7. **Troubleshooting Deployment Issues**:
-   - If you encounter import errors, try deploying `simple_app.py` or `debug_app.py` first
-   - Check that all dependencies are in `requirements.txt`
-   - Make sure all import paths are correct (use `from src.module import something` instead of `from module import something`)
-   - Ensure your Chroma database is properly initialized
-   - Check the Streamlit Cloud logs for detailed error messages
-
-Your app will now be deployed and publicly accessible via the URL provided by Streamlit!
-
-![alt text](image.png)
-
-## RSS Feed Integration
-
-The application includes RSS feed integration to display the latest posts from the Undiksha Information Systems Program website. This feature has been optimized for performance:
-
-1. **Cached RSS Feeds**: RSS feeds are fetched once and cached to improve performance. The cache is stored in the `cache/` directory and has a default expiry of 1 hour.
-
-2. **Separation of Fetching and Embedding**: 
-   - By default, RSS posts are fetched but not embedded in the vector store during normal operation
-   - This significantly improves performance by avoiding expensive embedding operations
-
-3. **Manual Embedding**: 
-   - A separate script is provided to manually embed RSS posts in the vector store
-   - This can be run as a scheduled task to keep the vector store updated
-
-4. **Usage**:
-   - To manually embed RSS posts, run:
-     ```bash
-     python embed_rss_posts.py --max-posts 10
-     ```
-   - This script can be scheduled to run periodically (e.g., using cron or Task Scheduler)
-
-5. **Refresh Button**:
-   - The UI includes a refresh button (🔄) to manually refresh the RSS feed
-   - This only updates the displayed posts and does not perform embedding
-
-This approach ensures that the application remains responsive while still providing up-to-date information from the RSS feed.
+Response:
+```json
+{
+  "answer": "The answer to your query...",
+  "sources": ["Source document content..."]
+}
+```

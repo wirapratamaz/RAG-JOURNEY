@@ -2,6 +2,10 @@
 .git
 .gitignore
 
+# Environment variables
+.env
+.env.*
+
 # Python
 __pycache__/
 *.py[cod]
@@ -20,16 +24,52 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-venv/
-myvenv/
 
 # Virtual Environment
 venv/
-ENV/
-myenv/
+myvenv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+Dockerfile.railway
+docker-compose.yml
+
+# Old Code and Data
+src/
+streamlit_app.py
+app.py
+simple_app.py
+debug_app.py
+*.log
+chroma_db/
+standalone_chroma_db/
+vector_db/
+*.md
+dataset/
+docs/
+eval/
+output/
+*.txt
+!requirements.txt
+*.csv
+*.json
+cache/
+
+# Cache
+__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Local ChromaDB files
 chroma_db/
