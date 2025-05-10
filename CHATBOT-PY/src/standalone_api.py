@@ -37,9 +37,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create a dedicated ChromaDB directory for this standalone API
-STANDALONE_CHROMA_DIR = "./standalone_chroma_db"
-os.makedirs(STANDALONE_CHROMA_DIR, exist_ok=True)
+# Railway ChromaDB Configuration
+CHROMA_URL = os.getenv("CHROMA_URL", "https://chroma-production-0925.up.railway.app")
+CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "qkj1zn522ppyn02i8wk5athfz98a1f4i")
 
 # Global client to ensure consistent settings
 _CHROMA_CLIENT = None
@@ -47,8 +47,26 @@ _CHROMA_CLIENT = None
 def get_chroma_client():
     global _CHROMA_CLIENT
     if _CHROMA_CLIENT is None:
-        _CHROMA_CLIENT = chromadb.PersistentClient(path=STANDALONE_CHROMA_DIR)
-        logger.info("Standalone ChromaDB client initialized")
+        try:
+            # Connect to Railway ChromaDB - updated for ChromaDB 0.6.3
+            chroma_url = CHROMA_URL
+            host = chroma_url.replace("https://", "").replace("http://", "")
+            _CHROMA_CLIENT = chromadb.HttpClient(
+                host=host,
+                port=443,
+                ssl=True,
+                headers={"Authorization": f"Bearer {CHROMA_TOKEN}"}
+            )
+            logger.info(f"Connected to Railway ChromaDB at {CHROMA_URL}")
+        except Exception as e:
+            logger.error(f"Error connecting to Railway ChromaDB: {e}")
+            # Fallback to local ChromaDB if available
+            try:
+                _CHROMA_CLIENT = chromadb.PersistentClient(path="./standalone_chroma_db")
+                logger.info("Fallback to local ChromaDB client")
+            except Exception as inner_e:
+                logger.error(f"Failed to initialize any ChromaDB client: {inner_e}")
+                raise
     return _CHROMA_CLIENT
 
 class RAGPipeline:
@@ -75,8 +93,14 @@ class RAGPipeline:
             # FAQ collection for exact answers
             faq_collection_name = "faqs_collection"
             
-            # Check if collections exist - updated for ChromaDB v0.6.0+
-            collections = chroma_client.list_collections()
+            # Check if collections exist - updated for ChromaDB 0.6.3
+            try:
+                collections = chroma_client.list_collections()
+                # In ChromaDB 0.6.0+, list_collections returns collection names
+                logger.info(f"Available collections: {collections}")
+            except Exception as e:
+                logger.error(f"Error listing collections: {e}")
+                collections = []
             
             # Initialize main collection
             main_collection_exists = main_collection_name in collections
@@ -85,11 +109,18 @@ class RAGPipeline:
                 self.main_vector_store = Chroma(
                     client=chroma_client,
                     collection_name=main_collection_name,
-                    embedding_function=self.embeddings,
-                    persist_directory=STANDALONE_CHROMA_DIR
+                    embedding_function=self.embeddings
                 )
             else:
-                logger.warning(f"Main collection {main_collection_name} not found. Run load_documents.py first.")
+                logger.warning(f"Main collection {main_collection_name} not found. Creating it now.")
+                # Create collection
+                chroma_client.create_collection(main_collection_name)
+                self.main_vector_store = Chroma(
+                    client=chroma_client,
+                    collection_name=main_collection_name,
+                    embedding_function=self.embeddings
+                )
+                logger.info(f"Created new collection: {main_collection_name}")
                 
             # Initialize FAQ collection
             faq_collection_exists = faq_collection_name in collections
@@ -98,11 +129,18 @@ class RAGPipeline:
                 self.faq_vector_store = Chroma(
                     client=chroma_client,
                     collection_name=faq_collection_name,
-                    embedding_function=self.embeddings,
-                    persist_directory=STANDALONE_CHROMA_DIR
+                    embedding_function=self.embeddings
                 )
             else:
-                logger.warning(f"FAQ collection {faq_collection_name} not found. Run load_faqs.py first.")
+                logger.warning(f"FAQ collection {faq_collection_name} not found. Creating it now.")
+                # Create collection
+                chroma_client.create_collection(faq_collection_name)
+                self.faq_vector_store = Chroma(
+                    client=chroma_client,
+                    collection_name=faq_collection_name,
+                    embedding_function=self.embeddings
+                )
+                logger.info(f"Created new collection: {faq_collection_name}")
                 
             logger.info("Vector stores initialized successfully")
         except Exception as e:

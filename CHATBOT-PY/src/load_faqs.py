@@ -14,18 +14,39 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Create a dedicated ChromaDB directory for the standalone API
-STANDALONE_CHROMA_DIR = "./standalone_chroma_db"
-os.makedirs(STANDALONE_CHROMA_DIR, exist_ok=True)
+# Railway ChromaDB Configuration
+CHROMA_URL = os.getenv("CHROMA_URL", "https://chroma-production-0925.up.railway.app")
+CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "qkj1zn522ppyn02i8wk5athfz98a1f4i")
 
 # Path to the FAQs file
 FAQ_FILE = "../si_faqs.txt"
 
 def get_chroma_client():
     """Get a ChromaDB client instance"""
-    client = chromadb.PersistentClient(path=STANDALONE_CHROMA_DIR)
-    logger.info("ChromaDB client initialized")
-    return client
+    try:
+        # Connect to Railway ChromaDB - updated for ChromaDB 0.6.3
+        chroma_url = CHROMA_URL
+        host = chroma_url.replace("https://", "").replace("http://", "")
+        client = chromadb.HttpClient(
+            host=host,
+            port=443,
+            ssl=True,
+            headers={"Authorization": f"Bearer {CHROMA_TOKEN}"}
+        )
+        logger.info(f"Connected to Railway ChromaDB at {CHROMA_URL}")
+        return client
+    except Exception as e:
+        logger.error(f"Error connecting to Railway ChromaDB: {e}")
+        # Fallback to local ChromaDB if available
+        try:
+            local_dir = "./standalone_chroma_db"
+            os.makedirs(local_dir, exist_ok=True)
+            client = chromadb.PersistentClient(path=local_dir)
+            logger.info("Fallback to local ChromaDB client")
+            return client
+        except Exception as inner_e:
+            logger.error(f"Failed to initialize any ChromaDB client: {inner_e}")
+            raise
 
 def load_faqs():
     """Load FAQs from the si_faqs.txt file"""
@@ -120,30 +141,41 @@ def add_to_vector_store(documents):
         client = get_chroma_client()
         collection_name = "faqs_collection"
         
-        # Check if collection exists - updated for ChromaDB v0.6.0+
-        collections = client.list_collections()
-        collection_exists = collection_name in collections
+        # Check if collection exists - updated for ChromaDB 0.6.3
+        try:
+            collections = client.list_collections()
+            # In ChromaDB 0.6.0+, list_collections returns collection names
+            collection_exists = collection_name in collections
+            logger.info(f"Available collections: {collections}")
+        except Exception as e:
+            logger.error(f"Error listing collections: {e}")
+            collection_exists = False
         
         if collection_exists:
             logger.info(f"Using existing collection: {collection_name}")
             vector_store = Chroma(
                 client=client,
                 collection_name=collection_name,
-                embedding_function=embeddings,
-                persist_directory=STANDALONE_CHROMA_DIR
+                embedding_function=embeddings
             )
             
             # Add documents to existing collection
             vector_store.add_documents(documents)
         else:
+            # Create collection if it doesn't exist
+            try:
+                client.create_collection(collection_name)
+                logger.info(f"Created new collection: {collection_name}")
+            except Exception as e:
+                logger.error(f"Error creating collection: {e}")
+            
             # Collection doesn't exist, create it
             logger.info(f"Creating new collection: {collection_name}")
             vector_store = Chroma.from_documents(
                 documents=documents,
                 embedding=embeddings,
                 client=client,
-                collection_name=collection_name,
-                persist_directory=STANDALONE_CHROMA_DIR
+                collection_name=collection_name
             )
         
         logger.info(f"Vector store updated with {len(documents)} FAQs")
