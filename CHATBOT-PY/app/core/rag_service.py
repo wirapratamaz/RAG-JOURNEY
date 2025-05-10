@@ -70,7 +70,7 @@ class RAGService:
         
         self.embeddings = OpenAIEmbeddings()
         self.main_vector_store = None
-        self.llm = ChatOpenAI(temperature=0, model="o3")
+        self.llm = ChatOpenAI(model="o3")
         self.initialize_vector_store()
         
     def initialize_vector_store(self):
@@ -264,7 +264,7 @@ Keputusan, Data Mining, Data Science, Teknologi Budaya, Mobile Apps
 
 Ir. I Nyoman Tri Anindia Putra, S.Kom., M.Cs.
 NIP. 199111302024061001 NIDN. 0830119102 Jabatan Fungsional : Dosen Google Scholar :
-Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : MSI, RIB Topik Riset : Computer Science;
+Tautan 🔗 SCOPUS : Tautan �� Konsentrasi : MSI, RIB Topik Riset : Computer Science;
 Digital Heritage; Information System; Computer Vision
 
 Putu Buddhi Prameswara, M.Kom.
