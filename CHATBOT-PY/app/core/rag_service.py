@@ -10,6 +10,7 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import Chroma
 
 # Configure logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -21,6 +22,16 @@ CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "qkj1zn522ppyn02i8wk5athfz98a1f4i")
 
 # Global client to ensure consistent settings
 _CHROMA_CLIENT = None
+
+# Lecturer information - kept out of prompt for better token management
+LECTURER_INFO = {
+    "edy listartha": """
+Ir. I Made Edy Listartha, S.Kom., M.Kom.
+NIP. 198608122019031005 NIDN. 0012088606 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : KS Topik Riset : Keamanan Sistem Informasi;
+Jaringan Komputer; Internet of Things, Robotik, dan Social Engineering
+"""
+}
 
 def get_chroma_client():
     """Get or initialize the ChromaDB client"""
@@ -59,7 +70,7 @@ class RAGService:
         
         self.embeddings = OpenAIEmbeddings()
         self.main_vector_store = None
-        self.llm = ChatOpenAI(temperature=0, model="gpt-4")
+        self.llm = ChatOpenAI(temperature=0, model="o3")
         self.initialize_vector_store()
         
     def initialize_vector_store(self):
@@ -153,6 +164,15 @@ class RAGService:
         """Process a query and return the answer"""
         logger.info(f"Processing query: {question}")
         
+        # First check if this is a lecturer-specific query
+        lecturer_info = self.check_for_lecturer_query(question)
+        if lecturer_info:
+            logger.info("Found lecturer information for direct response")
+            return {
+                "answer": lecturer_info.strip(),
+                "sources": ["dosen.md"]
+            }
+        
         if not self.main_vector_store:
             logger.error("Vector store not initialized")
             return {
@@ -164,6 +184,80 @@ class RAGService:
         prompt_template = """SUPER CRITICAL RULE: If the {context} contains a direct and complete answer to the user's specific {question} (e.g., it matches an FAQ entry), you MUST COPY that answer VERBATIM from the {context}. DO NOT SUMMARIZE, REPHRASE, or CHANGE IT IN ANY WAY. For example, if the question is 'Apa yang harus dilakukan mahasiswa setelah laporan skripsi disetujui (ACC) oleh dosen pembimbing?' and the context contains the full answer starting with 'Saya akan menjelaskan...' and including the link 'https://go.undiksha.ac.id/RegSidang-TI', you MUST output that exact text.
 
 ADDITIONAL CRITICAL RULE FOR INTERNSHIP DELIVERABLES: If the user asks about 'tagihan magang', 'kewajiban magang', 'apa saja yang harus diselesaikan saat magang', or similar, you MUST find the context listing the required items (starting with '1. Proposal Magang', '2. Input Jurnal harian...', etc.) and provide that EXACT numbered list and any concluding sentences from that specific context. DO NOT provide information about conduct ('tata tertib') instead.
+
+---
+
+INFORMASI DOSEN PROGRAM STUDI SISTEM INFORMASI:
+
+Prof. Dr. Gede Rasben Dantes, S.T, M.T.I.
+NIP. 197502212003121001 NIDN. 0021027503 Jabatan Fungsional : Profesor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : MSI Topik Riset : Enterprise Resource Planning
+(ERP); E-learning dan Teknologi Pembelajaran; Pengembangan Sistem Informasi dan
+Teknologi; Data Mining dan Artificial Intelligence
+
+Ir. I Gede Mahendra Darmawiguna, S.Kom., M.Sc.
+NIP. 198501042010121004 NIDN. 0004018502 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : RIB, MSI Topik Riset : Augmented Reality (AR)
+& Virtual Reality (VR); Immersive Learning; Data Science; Sistem Pendukung Keputusan;
+Information System; E- Learning
+
+Ir. I Made Ardwi Pradnyana, S.T., M.T.
+NIP. 198611182015041001 NIDN. 0818118602 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : MSI Topik Riset : Enterprise Information System;
+Human Computer Interaction; Green IT; IT Service Management; Business Process
+Management
+
+Gede Aditra Pradnyana, S.Kom., M.Kom.
+NIP. 198901192015041004 NIDN. 0819018901 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : RIB Topik Riset : Data Science; Text Mining;
+Natural Language Processing (NLP); Machine Learning; Data Mining; Educational Technology
+
+I Gusti Lanang Agung Raditya Putra, S.Pd., M.T.
+NIP. 198908272019031008 NIDN. 0827088901 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : - Konsentrasi : MSI Topik Riset : Enterprise Information System; IT
+Governance; E-Government
+
+Ir. I Made Edy Listartha, S.Kom., M.Kom.
+NIP. 198608122019031005 NIDN. 0012088606 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : KS Topik Riset : Keamanan Sistem Informasi;
+Jaringan Komputer; Internet of Things, Robotik, dan Social Engineering
+
+Ir. I Made Dendi Maysanjaya, S.Pd., M.Eng.
+NIP. 199005152019031008 NIDN. 0015059007 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : RIB Topik Riset : Kecerdasan Buatan, Sistem
+Pakar, Sistem Pendukung Keputusan, Teknik Biomedis
+
+Ir. I Gusti Ayu Agung Diatri Indradewi, S.Kom., M.T.
+NIP. 198907112020122004 NIDN. 0811078901 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : RIB Topik Riset : Digital Image Processing;
+Pattern Recognition; Information System; Machine Learning; Expert System
+
+Ir. Gede Arna Jude Saskara, S.T., M.T.
+NIP. 199105152020121003 NIDN. 0815059102 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : KS Topik Riset : Network; Network Security
+
+Ir. Putu Yudia Pratiwi, S.Pd., M.Eng.
+NIP. 199308042020122008 NIDN. 0004089302 Jabatan Fungsional : Lektor Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : MSI Topik Riset : Human Computer Interaction;
+User Experience
+
+Ir. Gede Surya Mahendra, S.Pd., M.Kom.
+NIP. 199003132022031009 NIDN. 0813039004 Jabatan Fungsional : Asisten Ahli Google
+Scholar : Tautan 🔗 SCOPUS : - Konsentrasi : RIB, MSI Topik Riset : Sistem Pendukung
+Keputusan, Data Mining, Data Science, Teknologi Budaya, Mobile Apps
+
+Ir. I Nyoman Tri Anindia Putra, S.Kom., M.Cs.
+NIP. 199111302024061001 NIDN. 0830119102 Jabatan Fungsional : Dosen Google Scholar :
+Tautan 🔗 SCOPUS : Tautan 🔗 Konsentrasi : MSI, RIB Topik Riset : Computer Science;
+Digital Heritage; Information System; Computer Vision
+
+Putu Buddhi Prameswara, M.Kom.
+NIP. 198804232024211001 NIDN. 0023048804 Jabatan Fungsional : Asisten Ahli Google
+Scholar : Tautan 🔗 SCOPUS : - Konsentrasi : MSI Topik Riset : IS/IT Evaluation; Education
+Technology
+
+INFORMASI PENTING:
+Koorprodi Sistem Informasi saat ini adalah Ir. I Made Dendi Maysanjaya, S.Pd., M.Eng. mulai dilantik tahun 2023.
 
 ---
 
