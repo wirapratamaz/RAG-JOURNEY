@@ -5,7 +5,7 @@ A standalone API for the Undiksha RAG-based chatbot, designed for easy deploymen
 ## Features
 
 - FastAPI-based REST API
-- RAG (Retrieval-Augmented Generation) with OpenAI's GPT-4
+- RAG (Retrieval-Augmented Generation) with OpenAI's GPT-3.5-turbo
 - ChromaDB integration for vector storage
 - Environment variable configuration
 - Railway deployment support
