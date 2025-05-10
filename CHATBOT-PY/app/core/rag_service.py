@@ -201,10 +201,26 @@ Mohon pastikan bahwa semua tahapan ini dilakukan dengan benar untuk memastikan p
 
 Untuk informasi lebih lanjut, silakan kunjungi: https://drive.google.com/file/d/1FHWn1JUfHRk9MsRqskqSZxvgnVamLE-K/view"""
                 logger.info("Using predefined answer for thesis topic submission procedure")
-                return {
-                    "answer": exact_answer,
-                    "sources": ["Karya Akhir"]
-                }
+                
+                # Use the retriever to get sources instead of hardcoding them
+                retriever = self.setup_retriever()
+                if retriever:
+                    try:
+                        # Get relevant documents for the question
+                        source_docs = retriever.invoke(question)
+                        return self.process_answer(exact_answer, source_docs, question)
+                    except Exception as e:
+                        logger.error(f"Error retrieving sources: {e}")
+                        # Return answer without sources as fallback
+                        return {
+                            "answer": exact_answer,
+                            "sources": []
+                        }
+                else:
+                    return {
+                        "answer": exact_answer,
+                        "sources": []
+                    }
         
         # Special case handling for curriculum question
         curriculum_patterns = [
@@ -227,10 +243,26 @@ Kurikulum KKNI 2016: Diterapkan untuk angkatan 2018. Kurikulum ini dirancang ber
 
 Setiap jenis kurikulum memiliki pendekatan dan fokus yang berbeda guna memastikan lulusan Program Studi Sistem Informasi Undiksha siap bersaing dan berhasil di dunia kerja yang semakin kompleks."""
                 logger.info("Using predefined answer for curriculum types question")
-                return {
-                    "answer": exact_answer,
-                    "sources": ["Kurikulum"]
-                }
+                
+                # Use the retriever to get sources instead of hardcoding them
+                retriever = self.setup_retriever()
+                if retriever:
+                    try:
+                        # Get relevant documents for the question
+                        source_docs = retriever.invoke(question)
+                        return self.process_answer(exact_answer, source_docs, question)
+                    except Exception as e:
+                        logger.error(f"Error retrieving sources: {e}")
+                        # Return answer without sources as fallback
+                        return {
+                            "answer": exact_answer,
+                            "sources": []
+                        }
+                else:
+                    return {
+                        "answer": exact_answer,
+                        "sources": []
+                    }
         
         # Special case handling for academic leave procedure
         cuti_akademik_patterns = [
@@ -254,19 +286,91 @@ Setiap jenis kurikulum memiliki pendekatan dan fokus yang berbeda guna memastika
 
 Jika membutuhkan informasi lebih lanjut atau bantuan terkait prosedur cuti akademik, silakan hubungi Koorprodi lebih lanjut. Semoga informasi ini berguna bagi Anda. Terima kasih."""
                 logger.info("Using predefined answer for academic leave procedure")
-                return {
-                    "answer": exact_answer,
-                    "sources": ["Informasi Akademik"]
-                }
+                
+                # Use the retriever to get sources instead of hardcoding them
+                retriever = self.setup_retriever()
+                if retriever:
+                    try:
+                        # Get relevant documents for the question
+                        source_docs = retriever.invoke(question)
+                        return self.process_answer(exact_answer, source_docs, question)
+                    except Exception as e:
+                        logger.error(f"Error retrieving sources: {e}")
+                        # Return answer without sources as fallback
+                        return {
+                            "answer": exact_answer,
+                            "sources": []
+                        }
+                else:
+                    return {
+                        "answer": exact_answer,
+                        "sources": []
+                    }
+        
+        # Special case handling for thesis examination procedure
+        ujian_skripsi_patterns = [
+            r'bagaimana mekanisme pelaksanaan ujian proposal skripsi dan ujian skripsi',
+            r'(persyaratan|komposisi) dewan penguji (ujian )?(proposal )?(dan )?(ujian )?skripsi'
+        ]
+        
+        for pattern in ujian_skripsi_patterns:
+            if re.search(pattern, question.lower().strip()):
+                logger.info(f"Pattern match found for thesis examination procedure: {pattern}")
+                exact_answer = """Ujian Proposal Skripsi: 
+– Minimal harus hadir 1 dosen pembimbing dan 2 dosen penguji 
+– Diharuskan mengundang minimal 10 mahasiswa lain sebagai partisipan 
+– Mahasiswa juga harus memilih satu orang moderator (biasanya rekan mahasiswa)
+
+Ujian Skripsi: 
+– Komposisi minimal adalah 2 dosen pembimbing dan 1 dosen penguji, atau 1 dosen pembimbing dan 2 dosen penguji
+
+Seluruh ujian dilakukan melalui sistem, dan tidak diperbolehkan adanya berkas hardcopy karena semua dokumen diakses secara digital."""
+                logger.info("Using predefined answer for thesis examination procedure")
+                
+                # Use the retriever to get sources instead of hardcoding them
+                retriever = self.setup_retriever()
+                if retriever:
+                    try:
+                        # Get relevant documents for the question
+                        source_docs = retriever.invoke(question)
+                        return self.process_answer(exact_answer, source_docs, question)
+                    except Exception as e:
+                        logger.error(f"Error retrieving sources: {e}")
+                        # Return answer without sources as fallback
+                        return {
+                            "answer": exact_answer,
+                            "sources": []
+                        }
+                else:
+                    return {
+                        "answer": exact_answer,
+                        "sources": []
+                    }
         
         # First check if this is a lecturer-specific query
         lecturer_info = self.check_for_lecturer_query(question)
         if lecturer_info:
             logger.info("Found lecturer information for direct response")
-            return {
-                "answer": lecturer_info.strip(),
-                "sources": ["dosen.md"]
-            }
+            
+            # Use the retriever to get sources instead of hardcoding them
+            retriever = self.setup_retriever()
+            if retriever:
+                try:
+                    # Get relevant documents for the question
+                    source_docs = retriever.invoke(question)
+                    return self.process_answer(lecturer_info.strip(), source_docs, question)
+                except Exception as e:
+                    logger.error(f"Error retrieving sources: {e}")
+                    # Return answer without sources as fallback
+                    return {
+                        "answer": lecturer_info.strip(),
+                        "sources": []
+                    }
+            else:
+                return {
+                    "answer": lecturer_info.strip(),
+                    "sources": []
+                }
         
         if not self.main_vector_store:
             logger.error("Vector store not initialized")
