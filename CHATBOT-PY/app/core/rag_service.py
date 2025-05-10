@@ -39,7 +39,7 @@ def get_chroma_client():
             logger.info(f"Connected to Remote ChromaDB at {CHROMA_URL}")
         except Exception as e:
             logger.error(f"Error connecting to Remote ChromaDB: {e}")
-            # Fallback to local ChromaDB if available
+            # Fallback to local ChromaDB
             try:
                 _CHROMA_CLIENT = chromadb.PersistentClient(path="./chroma_db")
                 logger.info("Fallback to local ChromaDB client")
@@ -79,26 +79,50 @@ class RAGService:
                 logger.error(f"Error listing collections: {e}")
                 collections = []
             
-            # Initialize main collection
-            collection_exists = collection_name in collections
-            if collection_exists:
-                logger.info(f"Using existing ChromaDB collection: {collection_name}")
+            # Try to use an existing collection first
+            try:
+                # Instead of checking if the collection exists, try to get it directly
+                logger.info(f"Attempting to use collection: {collection_name}")
                 self.main_vector_store = Chroma(
                     client=chroma_client,
                     collection_name=collection_name,
                     embedding_function=self.embeddings
                 )
-            else:
-                logger.warning(f"Collection {collection_name} not found. Creating it now.")
-                # Create collection
-                chroma_client.create_collection(collection_name)
-                self.main_vector_store = Chroma(
-                    client=chroma_client,
-                    collection_name=collection_name,
-                    embedding_function=self.embeddings
-                )
-                logger.info(f"Created new collection: {collection_name}")
+                logger.info(f"Successfully connected to collection: {collection_name}")
+            except Exception as e:
+                logger.warning(f"Error connecting to collection {collection_name}: {e}")
                 
+                # Check if we should try to use another existing collection
+                if collections:
+                    # Try to use the first available collection
+                    alt_collection = collections[0]
+                    logger.info(f"Trying alternative collection: {alt_collection}")
+                    try:
+                        self.main_vector_store = Chroma(
+                            client=chroma_client,
+                            collection_name=alt_collection,
+                            embedding_function=self.embeddings
+                        )
+                        logger.info(f"Using alternative collection: {alt_collection}")
+                    except Exception as alt_e:
+                        logger.error(f"Error using alternative collection: {alt_e}")
+                        raise ValueError(f"Could not initialize vector store with any collection: {e}")
+                else:
+                    # Fallback to local ChromaDB
+                    logger.warning(f"No collections available. Using local ChromaDB.")
+                    try:
+                        local_client = chromadb.PersistentClient(path="./chroma_db")
+                        # Don't try to create a collection, just initialize an empty one
+                        self.main_vector_store = Chroma(
+                            client=local_client,
+                            collection_name="local_fallback",
+                            embedding_function=self.embeddings
+                        )
+                        logger.info("Initialized local ChromaDB fallback")
+                    except Exception as local_e:
+                        logger.error(f"Error initializing local fallback: {local_e}")
+                        raise
+            
             logger.info("Vector store initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing vector store: {e}")
@@ -131,7 +155,10 @@ class RAGService:
         
         if not self.main_vector_store:
             logger.error("Vector store not initialized")
-            raise ValueError("Vector store not initialized properly")
+            return {
+                "answer": "Sorry, the knowledge base is not available right now. Please try again later.",
+                "sources": []
+            }
         
         # Set up prompt template
         prompt_template = """You are an AI assistant for Undiksha University. Please provide accurate, detailed, and helpful answers based on the provided context. 
@@ -175,10 +202,16 @@ Answer:"""
                 return self.process_answer(result, source_docs)
             except Exception as e:
                 logger.error(f"Error in query processing: {e}")
-                raise
+                return {
+                    "answer": f"I encountered an error while processing your query. Please try again or rephrase your question.",
+                    "sources": []
+                }
         else:
             logger.error("No retriever available")
-            raise ValueError("Retriever not available")
+            return {
+                "answer": "Sorry, I cannot retrieve information right now. Please try again later.",
+                "sources": []
+            }
     
     def process_answer(self, result, source_docs):
         """Process the answer, adding links if necessary"""
