@@ -2,13 +2,14 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Copy requirements - use the root directory requirements file
-COPY requirements.txt .
+# Copy requirements from src directory
+COPY src/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code and standalone API
-COPY src/ src/
-COPY standalone_api.py .
+# Copy source code
+COPY src/ .
+
+# Copy additional files if they exist in root
 COPY si_faqs.txt .
 
 # Create necessary directories
