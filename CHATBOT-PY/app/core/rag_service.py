@@ -206,6 +206,59 @@ Untuk informasi lebih lanjut, silakan kunjungi: https://drive.google.com/file/d/
                     "sources": ["Karya Akhir"]
                 }
         
+        # Special case handling for curriculum question
+        curriculum_patterns = [
+            r'apa( saja)? jenis kurikulum( yang digunakan)? prodi sistem informasi undiksha',
+            r'jenis kurikulum( apa saja)? (yang digunakan oleh)? (prodi|program studi) (si|sistem informasi)'
+        ]
+        
+        for pattern in curriculum_patterns:
+            if re.search(pattern, question.lower().strip()):
+                logger.info(f"Pattern match found for curriculum question: {pattern}")
+                exact_answer = """Program Studi Sistem Informasi Undiksha menerapkan berbagai jenis kurikulum yang telah disusun untuk memenuhi kebutuhan dan tujuan program studi tersebut. Berikut adalah jenis-jenis kurikulum yang telah diterapkan:
+
+Kurikulum Undiksha 2024: Merupakan kurikulum yang digunakan untuk mahasiswa angkatan 2022 ke atas, yang mendukung implementasi Model Pendidikan Merdeka Belajar Kampus Merdeka (MBKM) Undiksha. Kurikulum ini telah disusun dengan penyempurnaan untuk menyesuaikan kebutuhan industri dan tuntutan pasar kerja.
+
+Kurikulum MBKM Undiksha 2020: Merupakan kurikulum yang diterapkan untuk angkatan 2020–2021. Kurikulum ini memiliki penekanan pada penguatan kompetensi dan keahlian mahasiswa dalam bidang Sistem Informasi.
+
+Kurikulum Undiksha 2019: Digunakan untuk mahasiswa angkatan 2019. Kurikulum ini merangkum serangkaian mata kuliah wajib dan pilihan yang diperlukan untuk memahami konsep dan aplikasi Sistem Informasi.
+
+Kurikulum KKNI 2016: Diterapkan untuk angkatan 2018. Kurikulum ini dirancang berdasarkan Kerangka Kualifikasi Nasional Indonesia (KKNI) untuk memastikan pemenuhan kompetensi akademik dan praktis yang diperlukan dalam bidang Sistem Informasi.
+
+Setiap jenis kurikulum memiliki pendekatan dan fokus yang berbeda guna memastikan lulusan Program Studi Sistem Informasi Undiksha siap bersaing dan berhasil di dunia kerja yang semakin kompleks."""
+                logger.info("Using predefined answer for curriculum types question")
+                return {
+                    "answer": exact_answer,
+                    "sources": ["Kurikulum"]
+                }
+        
+        # Special case handling for academic leave procedure
+        cuti_akademik_patterns = [
+            r'bagaimana (prosedur|cara) (mengurus|pengajuan) (surat permohonan )?cuti akademik',
+            r'(prosedur|cara) (mengurus|mengajukan) cuti akademik'
+        ]
+        
+        for pattern in cuti_akademik_patterns:
+            if re.search(pattern, question.lower().strip()):
+                logger.info(f"Pattern match found for academic leave procedure: {pattern}")
+                exact_answer = """Prosedur pengajuan cuti akademik di Program Studi Sistem Informasi Undiksha adalah sebagai berikut:
+
+1. Seorang mahasiswa dapat mengajukan cuti akademik dalam keadaan terpaksa. Mahasiswa harus menghentikan studinya untuk sementara waktu dengan izin dari Dekan.
+2. Cuti akademik hanya dapat dilaksanakan sekali selama masa studi dengan batas waktu maksimal 1 semester.
+3. Mahasiswa yang mengambil cuti akademik harus melapor untuk aktif kembali pada akhir semester berjalan. Jika tidak melapor, maka mahasiswa tersebut dianggap drop out (DO).
+4. Waktu yang dihabiskan selama cuti akademik tidak dihitung dalam total masa studi.
+5. Selama cuti akademik, mahasiswa dibebaskan dari kewajiban membayar UKT.
+6. Mahasiswa yang mengambil cuti akademik dapat diterima kembali sebagai mahasiswa aktif setelah memenuhi persyaratan administrasi dan mendapatkan surat izin untuk aktif kuliah kembali dari Dekan.
+7. Ketika aktif kembali setelah cuti, mahasiswa hanya dapat memproyeksikan mata kuliah sebanyak 14 SKS karena IP selama cuti dianggap nol.
+8. Batas waktu pengajuan cuti akademik dan aktif kembali diatur dalam kalender akademik.
+
+Jika membutuhkan informasi lebih lanjut atau bantuan terkait prosedur cuti akademik, silakan hubungi Koorprodi lebih lanjut. Semoga informasi ini berguna bagi Anda. Terima kasih."""
+                logger.info("Using predefined answer for academic leave procedure")
+                return {
+                    "answer": exact_answer,
+                    "sources": ["Informasi Akademik"]
+                }
+        
         # First check if this is a lecturer-specific query
         lecturer_info = self.check_for_lecturer_query(question)
         if lecturer_info:
