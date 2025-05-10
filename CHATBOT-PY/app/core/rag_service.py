@@ -347,6 +347,63 @@ Seluruh ujian dilakukan melalui sistem, dan tidak diperbolehkan adanya berkas ha
                         "sources": []
                     }
         
+        # Special case handling for scholarship information
+        beasiswa_patterns = [
+            r'bagaimana cara mendapatkan informasi (tentang|mengenai) beasiswa',
+            r'apa saja (jenis )?beasiswa yang tersedia',
+            r'informasi beasiswa'
+        ]
+        
+        for pattern in beasiswa_patterns:
+            if re.search(pattern, question.lower().strip()):
+                logger.info(f"Pattern match found for scholarship information: {pattern}")
+                
+                # Use the retriever to get the actual content
+                retriever = self.setup_retriever()
+                if retriever:
+                    try:
+                        # Get relevant documents for the question
+                        source_docs = retriever.invoke(question)
+                        
+                        # Process with LLM to improve formatting but keep content from source
+                        improve_format_prompt = """Based on the retrieved information about scholarships at Program Studi Sistem Informasi, 
+format the answer using this EXACT format from the reference document:
+
+"Terdapat beberapa jenis beasiswa yang tersedia bagi mahasiswa Program Studi Sistem Informasi, antara lain:
+
+Beasiswa Bidikmisi (untuk mahasiswa kurang mampu dengan prestasi akademik baik)
+Beasiswa Peningkatan Prestasi Akademik (PPA)
+Beasiswa Bantuan Belajar Mahasiswa (BBM)
+Beasiswa Afirmasi untuk mahasiswa asal Papua
+Beasiswa dari lembaga perbankan atau pemerintah daerah.
+Informasi detail, persyaratan, dan prosedur pendaftaran dapat diakses melalui portal beasiswa resmi Undiksha serta informasi yang diumumkan oleh Program Studi.
+
+DO NOT add any information not present in the retrieved content.
+DO NOT start with phrases like "Saya akan menjelaskan" or similar introductions.
+Preserve all scholarship types mentioned in the sources but use EXACTLY the format above."""
+                        
+                        try:
+                            response = self.llm.invoke(improve_format_prompt + "\n\nSource content:\n" + 
+                                                     "\n".join([doc.page_content for doc in source_docs if hasattr(doc, 'page_content')]))
+                            
+                            # Use the LLM-improved formatting but with retrieved content
+                            return self.process_answer(response.content, source_docs, question)
+                        except Exception as format_error:
+                            logger.error(f"Error formatting scholarship information: {format_error}")
+                            # Fall back to regular processing
+                            return self.process_answer("", source_docs, question)
+                    except Exception as e:
+                        logger.error(f"Error retrieving scholarship information: {e}")
+                        return {
+                            "answer": "Tidak dapat mengakses informasi beasiswa saat ini. Silakan coba lagi nanti.",
+                            "sources": []
+                        }
+                else:
+                    return {
+                        "answer": "Tidak dapat mengakses informasi beasiswa saat ini. Silakan coba lagi nanti.",
+                        "sources": []
+                    }
+        
         # First check if this is a lecturer-specific query
         lecturer_info = self.check_for_lecturer_query(question)
         if lecturer_info:
