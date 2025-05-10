@@ -18,6 +18,12 @@ RUN echo "requests>=2.30.0" >> requirements.txt
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create .env file with environment variables
+RUN echo "CHROMA_URL=https://chroma-production-0925.up.railway.app" > .env
+RUN echo "CHROMA_TOKEN=qkj1zn522ppyn02i8wk5athfz98a1f4i" >> .env
+RUN echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
+RUN echo "PORT=8000" >> .env
+
 # Create standalone_api.py
 RUN echo 'import os' > standalone_api.py
 RUN echo 'from fastapi import FastAPI' >> standalone_api.py
@@ -40,14 +46,17 @@ RUN echo '' >> standalone_api.py
 RUN echo '@app.get("/")' >> standalone_api.py
 RUN echo 'async def root():' >> standalone_api.py
 RUN echo '    return {"message": "Welcome to the API"}' >> standalone_api.py
+RUN echo '' >> standalone_api.py
+RUN echo 'if __name__ == "__main__":' >> standalone_api.py
+RUN echo '    import uvicorn' >> standalone_api.py
+RUN echo '    port = int(os.getenv("PORT", "8000"))' >> standalone_api.py
+RUN echo '    uvicorn.run("standalone_api:app", host="0.0.0.0", port=port)' >> standalone_api.py
 
-# Set environment variables
-ENV CHROMA_URL="https://chroma-production-0925.up.railway.app" 
-ENV CHROMA_TOKEN="qkj1zn522ppyn02i8wk5athfz98a1f4i"
-ENV PORT=8000
+# Create directory for ChromaDB
+RUN mkdir -p standalone_chroma_db
 
 # Expose port
 EXPOSE 8000
 
 # Command to run the API
-CMD ["uvicorn", "standalone_api:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["python", "standalone_api.py"]
